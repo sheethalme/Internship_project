@@ -6,6 +6,7 @@ const OrdersContext = createContext();
 
 export function OrdersProvider({ children }) {
   const [orders, setOrders] = useState([]);
+  const [bulkOrders, setBulkOrders] = useState([]);
   const [grievances, setGrievances] = useState(() => {
     try { return JSON.parse(localStorage.getItem('gg_grievances') || JSON.stringify(MOCK_GRIEVANCES)); }
     catch { return MOCK_GRIEVANCES; }
@@ -18,7 +19,6 @@ export function OrdersProvider({ children }) {
   useEffect(() => { localStorage.setItem('gg_grievances', JSON.stringify(grievances)); }, [grievances]);
   useEffect(() => { localStorage.setItem('gg_refunds',    JSON.stringify(refunds));    }, [refunds]);
 
-  // Fetch real orders on mount if student is logged in
   useEffect(() => {
     const token = localStorage.getItem('gg_token');
     const auth  = localStorage.getItem('gg_auth');
@@ -27,8 +27,17 @@ export function OrdersProvider({ children }) {
       const { role } = JSON.parse(auth);
       if (role === 'student') {
         api.get('/orders/my').then(data => {
-          setOrders(normalizeOrders(data));
+          const fetched = normalizeOrders(data);
+          // Merge: preserve any locally-simulated status advances rather than overwriting
+          setOrders(prev => {
+            if (prev.length === 0) return fetched;
+            return fetched.map(o => {
+              const local = prev.find(p => p.order_id === o.order_id);
+              return local ? { ...o, status: local.status, rated: local.rated } : o;
+            });
+          });
         }).catch(() => {});
+        api.get('/bulk-orders/my').then(data => setBulkOrders(data)).catch(() => {});
       }
     } catch {}
   }, []);
@@ -45,21 +54,21 @@ export function OrdersProvider({ children }) {
       rated: false,
     }));
 
-  // ── PLACE ORDER (calls real API) ─────────────────────────────
+  // ── PLACE ORDER ──────────────────────────────────────────────
   const placeOrder = async (orderData) => {
     const apiItems    = orderData.items.map(i => ({ item_id: i.item_id, quantity: i.quantity }));
     const loyalty_used = orderData.loyalty_used || 0;
 
-    // 1. Create order
     const result = await api.post('/orders', {
-      canteen_id:   orderData.canteen_id,
-      pickup_slot:  orderData.pickup_slot,
-      is_preorder:  false,
-      items:        apiItems,
+      canteen_id:        orderData.canteen_id,
+      pickup_slot:       orderData.pickup_slot,
+      is_preorder:       false,
+      items:             apiItems,
       loyalty_used,
+      fulfillment_type:  orderData.fulfillment_type || 'pickup',
+      delivery_location: orderData.delivery_location || null,
     });
 
-    // 2. Simulate payment (initiate → confirm)
     try {
       const payment = await api.post('/payments/initiate', {
         order_id: result.order_id,
@@ -68,26 +77,28 @@ export function OrdersProvider({ children }) {
       });
       await api.post('/payments/confirm', { payment_id: payment.payment_id });
     } catch {
-      // Payment tracking failure shouldn't block the order flow
+      // payment tracking failure doesn't block order
     }
 
-    // 3. Build normalized order object for local state
     const newOrder = {
-      order_id:     result.order_id,
-      order_code:   result.order_code,
-      student_id:   orderData.student_id,
-      canteen_id:   orderData.canteen_id,
-      canteen_name: orderData.canteen_name,
-      status:       'placed',
-      pickup_slot:  orderData.pickup_slot,
-      is_preorder:  false,
-      preorder_date: null,
-      total_amount:  result.total_amount,
+      order_id:          result.order_id,
+      order_code:        result.order_code,
+      student_id:        orderData.student_id,
+      canteen_id:        orderData.canteen_id,
+      canteen_name:      orderData.canteen_name,
+      status:            'placed',
+      pickup_slot:       orderData.pickup_slot,
+      is_preorder:       false,
+      preorder_date:     null,
+      total_amount:      result.total_amount,
       loyalty_used,
-      items:        orderData.items,
-      payment_method: orderData.payment_method,
-      placed_at:    new Date().toISOString(),
-      rated:        false,
+      items:             orderData.items,
+      payment_method:    orderData.payment_method,
+      placed_at:         new Date().toISOString(),
+      rated:             false,
+      fulfillment_type:  orderData.fulfillment_type || 'pickup',
+      delivery_location: orderData.delivery_location || null,
+      delivery_fee:      result.delivery_fee || 0,
     };
 
     setOrders(prev => [newOrder, ...prev]);
@@ -102,7 +113,28 @@ export function OrdersProvider({ children }) {
     setOrders(prev => prev.map(o => o.order_id === order_id ? { ...o, rated: true } : o));
   };
 
-  // ── GRIEVANCES (localStorage) ────────────────────────────────
+  // ── BULK ORDERS ──────────────────────────────────────────────
+  const submitBulkOrder = async (data) => {
+    const result = await api.post('/bulk-orders', data);
+    const newBulk = {
+      ...data,
+      bulk_order_id:   result.bulk_order_id,
+      bulk_order_code: result.bulk_order_code,
+      status:          'pending',
+      submitted_at:    new Date().toISOString(),
+    };
+    setBulkOrders(prev => [newBulk, ...prev]);
+    return result;
+  };
+
+  const refreshBulkOrders = async () => {
+    try {
+      const data = await api.get('/bulk-orders/my');
+      setBulkOrders(data);
+    } catch {}
+  };
+
+  // ── GRIEVANCES ───────────────────────────────────────────────
   const addGrievance = (data) => {
     const newG = {
       grievance_id: Date.now(),
@@ -129,7 +161,7 @@ export function OrdersProvider({ children }) {
     setGrievances(prev => prev.map(g => g.grievance_id === id ? { ...g, status: 'resolved' } : g));
   };
 
-  // ── REFUNDS (localStorage) ───────────────────────────────────
+  // ── REFUNDS ──────────────────────────────────────────────────
   const addRefund = (data) => {
     const newR = {
       refund_id:    Date.now(),
@@ -151,7 +183,7 @@ export function OrdersProvider({ children }) {
   };
 
   const getActiveOrders = (canteen_id) =>
-    orders.filter(o => o.canteen_id === canteen_id && !['picked_up', 'cancelled'].includes(o.status));
+    orders.filter(o => o.canteen_id === canteen_id && !['picked_up', 'delivered', 'cancelled'].includes(o.status));
 
   const getQueuePosition = (order_id, canteen_id) => {
     const active = orders.filter(o =>
@@ -164,8 +196,9 @@ export function OrdersProvider({ children }) {
 
   return (
     <OrdersContext.Provider value={{
-      orders, grievances, refunds,
+      orders, bulkOrders, grievances, refunds,
       placeOrder, updateOrderStatus, markRated,
+      submitBulkOrder, refreshBulkOrders,
       addGrievance, replyGrievance, resolveGrievance,
       addRefund, updateRefundStatus,
       getActiveOrders, getQueuePosition,

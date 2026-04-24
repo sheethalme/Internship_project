@@ -25,6 +25,7 @@ app.use('/api/grievances', require('./routes/grievances'));
 app.use('/api/refunds', require('./routes/refunds'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/payments', require('./routes/payments'));
+app.use('/api/bulk-orders', require('./routes/bulkOrders'));
 
 // Slot recommendation endpoint
 const { getSlots } = require('./utils/slotUtils');

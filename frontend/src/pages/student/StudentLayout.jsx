@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Home, Store, ShoppingBag, ClipboardList, Award, Bell, AlertCircle, RefreshCw, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
+import { Home, Store, ShoppingBag, ClipboardList, Award, Bell, AlertCircle, RefreshCw, LogOut, Sun, Moon, Menu, X, CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/student/notifications', icon: Bell, label: 'Alerts' },
   { to: '/student/grievances', icon: AlertCircle, label: 'Issues' },
   { to: '/student/refunds', icon: RefreshCw, label: 'Refunds' },
+  { to: '/student/bulk-order', icon: CalendarDays, label: 'Bulk Order' },
 ];
 
 export default function StudentLayout() {

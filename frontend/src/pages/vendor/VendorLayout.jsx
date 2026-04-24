@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, BarChart2, AlertCircle, RefreshCw, LogOut, Sun, Moon, Menu } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, BarChart2, AlertCircle, RefreshCw, LogOut, Sun, Moon, Menu, Package } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/vendor/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/vendor/grievances', icon: AlertCircle, label: 'Grievances' },
   { to: '/vendor/refunds', icon: RefreshCw, label: 'Refunds' },
+  { to: '/vendor/bulk-orders', icon: Package, label: 'Bulk Orders' },
 ];
 
 export default function VendorLayout() {

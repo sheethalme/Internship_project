@@ -25,6 +25,7 @@ import LoyaltyPage from './pages/Student/LoyaltyPage';
 import NotificationsPage from './pages/Student/NotificationsPage';
 import GrievancesPage from './pages/Student/GrievancesPage';
 import RefundsPage from './pages/Student/RefundsPage';
+import BulkOrderForm from './pages/Student/BulkOrderForm';
 
 // Vendor
 import VendorLayout from './pages/Vendor/VendorLayout';
@@ -34,6 +35,7 @@ import MenuManagement from './pages/Vendor/MenuManagement';
 import VendorAnalytics from './pages/Vendor/VendorAnalytics';
 import VendorGrievances from './pages/Vendor/VendorGrievances';
 import VendorRefunds from './pages/Vendor/VendorRefunds';
+import VendorBulkOrders from './pages/Vendor/VendorBulkOrders';
 
 // Admin
 import AdminLayout from './pages/Admin/AdminLayout';
@@ -44,10 +46,15 @@ import AdminGrievances from './pages/Admin/AdminGrievances';
 import AdminRefunds from './pages/Admin/AdminRefunds';
 import AdminAnalytics from './pages/Admin/AdminAnalytics';
 import AdminReviews from './pages/Admin/AdminReviews';
+import AdminBulkOrders from './pages/Admin/AdminBulkOrders';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, role, loading } = useAuth();
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-gold-500 border-t-transparent rounded-full animate-spin" /></div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-gold-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
   if (!user) return <Navigate to="/" replace />;
   if (requiredRole && role !== requiredRole) return <Navigate to="/" replace />;
   return children;
@@ -66,8 +73,8 @@ export default function App() {
                     {/* Public */}
                     <Route path="/" element={<LandingPage />} />
                     <Route path="/login/student" element={<StudentAuth />} />
-                    <Route path="/login/vendor" element={<VendorAuth />} />
-                    <Route path="/login/admin" element={<AdminAuth />} />
+                    <Route path="/login/vendor"  element={<VendorAuth />} />
+                    <Route path="/login/admin"   element={<AdminAuth />} />
 
                     {/* Student Portal */}
                     <Route path="/student" element={<ProtectedRoute requiredRole="student"><StudentLayout /></ProtectedRoute>}>
@@ -75,6 +82,7 @@ export default function App() {
                       <Route path="canteens" element={<BrowseCanteens />} />
                       <Route path="canteens/:id" element={<CanteenMenu />} />
                       <Route path="orders" element={<MyOrders />} />
+                      <Route path="bulk-order" element={<BulkOrderForm />} />
                       <Route path="loyalty" element={<LoyaltyPage />} />
                       <Route path="notifications" element={<NotificationsPage />} />
                       <Route path="grievances" element={<GrievancesPage />} />
@@ -89,6 +97,7 @@ export default function App() {
                       <Route path="analytics" element={<VendorAnalytics />} />
                       <Route path="grievances" element={<VendorGrievances />} />
                       <Route path="refunds" element={<VendorRefunds />} />
+                      <Route path="bulk-orders" element={<VendorBulkOrders />} />
                     </Route>
 
                     {/* Admin Portal */}
@@ -100,6 +109,7 @@ export default function App() {
                       <Route path="refunds" element={<AdminRefunds />} />
                       <Route path="analytics" element={<AdminAnalytics />} />
                       <Route path="reviews" element={<AdminReviews />} />
+                      <Route path="bulk-orders" element={<AdminBulkOrders />} />
                     </Route>
 
                     <Route path="*" element={<Navigate to="/" replace />} />

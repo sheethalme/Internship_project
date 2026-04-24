@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, Store, AlertCircle, RotateCcw, BarChart2, Star, LogOut, Sun, Moon, Menu, Shield } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Store, AlertCircle, RotateCcw, BarChart2, Star, LogOut, Sun, Moon, Menu, Shield, Package } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -12,6 +12,7 @@ const NAV = [
   { to: '/admin/refunds', icon: RotateCcw, label: 'Refunds' },
   { to: '/admin/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/admin/reviews', icon: Star, label: 'Reviews' },
+  { to: '/admin/bulk-orders', icon: Package, label: 'Bulk Orders' },
 ];
 
 export default function AdminLayout() {
