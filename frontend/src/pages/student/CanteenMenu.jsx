@@ -57,7 +57,7 @@ export default function CanteenMenu() {
 
       {/* Banner */}
       <div className="relative h-48 md:h-64 rounded-2xl overflow-hidden mb-6">
-        <img src={canteen.banner_image} alt={canteen.name} className="w-full h-full object-cover" />
+        <img src={canteen.banner_image} alt={canteen.name} className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.parentElement.style.background = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)'; }} />
         <div className="absolute inset-0 bg-gradient-to-t from-navy-900/90 via-navy-900/30 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6">
           <h1 className="text-3xl font-black text-white">{canteen.name}</h1>
@@ -136,7 +136,7 @@ export default function CanteenMenu() {
             >
               {/* Item image */}
               <div className="relative h-32 rounded-xl overflow-hidden mb-3">
-                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.style.display = 'none'; e.target.parentElement.style.background = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)'; }} />
                 {!item.is_available && (
                   <div className="absolute inset-0 bg-navy-900/70 flex items-center justify-center">
                     <span className="badge-red text-sm px-3 py-1">🔴 Sold Out</span>

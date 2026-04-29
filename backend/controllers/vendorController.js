@@ -169,7 +169,15 @@ exports.getAnalytics = async (req, res) => {
        FROM orders WHERE canteen_id = ? AND fulfillment_type = 'delivery' AND status NOT IN ('cancelled')`,
       [canteenId]
     );
-    res.json({ revenue, top_items: topItems, heatmap, fulfillment_split: fulfillmentSplit, delivery_revenue });
+    const [[completion]] = await db.query(
+      `SELECT
+        SUM(CASE WHEN status IN ('picked_up','delivered') THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status IN ('placed','accepted','preparing','ready','out_for_delivery') THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+       FROM orders WHERE canteen_id = ?`,
+      [canteenId]
+    );
+    res.json({ revenue, top_items: topItems, heatmap, fulfillment_split: fulfillmentSplit, delivery_revenue, completion });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 

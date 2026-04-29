@@ -11,18 +11,18 @@ import { formatCurrency, generateTimeSlots } from '../../data/mockData';
 import QRCodeDisplay from '../ui/QRCodeDisplay';
 import Confetti from '../ui/Confetti';
 
-const DELIVERY_FEE = 15;
-const DELIVERY_FLOORS = [
-  'Central Block — 1st Floor',
-  'Central Block — 2nd Floor',
-  'Central Block — 3rd Floor',
-  'Central Block — 4th Floor',
-  'Central Block — 5th Floor',
-  'Central Block — 6th Floor',
-  'Central Block — 7th Floor',
-  'Central Block — 8th Floor',
-  'Central Block — 9th Floor',
-  'Central Block — 10th Floor',
+const DELIVERY_LOCATIONS = [
+  { label: 'Central Block — 1st Floor', fee: 5 },
+  { label: 'Central Block — 2nd Floor', fee: 5 },
+  { label: 'Central Block — 3rd Floor', fee: 5 },
+  { label: 'Central Block — 4th Floor', fee: 5 },
+  { label: 'Central Block — 5th Floor', fee: 5 },
+  { label: 'Central Block — 6th Floor', fee: 5 },
+  { label: 'Central Block — 7th Floor', fee: 5 },
+  { label: 'Central Block — 8th Floor', fee: 5 },
+  { label: 'Block II',   fee: 10 },
+  { label: 'Block IV',   fee: 15 },
+  { label: 'R&D Block',  fee: 20 },
 ];
 
 export default function CheckoutModal({ canteen, onClose }) {
@@ -50,7 +50,8 @@ export default function CheckoutModal({ canteen, onClose }) {
   const slots = generateTimeSlots(canteen.canteen_id);
   const subtotal = getTotal(canteen.canteen_id);
   const coinsDiscount = useCoins ? Math.floor((user?.loyalty_points || 0) / 100) * 10 : 0;
-  const deliveryFee = fulfillmentType === 'delivery' ? DELIVERY_FEE : 0;
+  const selectedLocation = DELIVERY_LOCATIONS.find(l => l.label === selectedFloor);
+  const deliveryFee = fulfillmentType === 'delivery' && selectedLocation ? selectedLocation.fee : 0;
   const total = Math.max(0, subtotal - coinsDiscount + deliveryFee);
   const items = Object.values(canteen.items).map(({ item, qty }) => ({
     item_id: item.item_id, name: item.name, quantity: qty, unit_price: item.price,
@@ -160,9 +161,9 @@ export default function CheckoutModal({ canteen, onClose }) {
               {fulfillmentType === 'delivery' && (
                 <div ref={feeChipRef} className="flex items-center gap-2 mb-4 origin-top">
                   <span className="inline-flex items-center gap-1.5 bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs font-semibold px-3 py-1.5 rounded-full">
-                    <Truck size={11} /> + ₹{DELIVERY_FEE} Delivery Fee
+                    <Truck size={11} /> {selectedFloor ? `+ ₹${deliveryFee} Delivery Fee` : 'Select location for fee'}
                   </span>
-                  <span className="text-white/40 text-xs">~25 mins to your floor</span>
+                  <span className="text-white/40 text-xs">~25 mins</span>
                 </div>
               )}
 
@@ -170,15 +171,15 @@ export default function CheckoutModal({ canteen, onClose }) {
               <div ref={deliveryPanelRef} style={{ height: fulfillmentType === 'delivery' ? 'auto' : 0, overflow: 'hidden', opacity: fulfillmentType === 'delivery' ? 1 : 0 }}>
                 {fulfillmentType === 'delivery' && (
                   <div className="mb-4">
-                    <p className="text-white/60 text-sm mb-2 font-medium">Select your floor in Central Block</p>
+                    <p className="text-white/60 text-sm mb-2 font-medium">Select your delivery location</p>
                     <select
                       value={selectedFloor}
                       onChange={e => setSelectedFloor(e.target.value)}
                       className="input-dark text-sm"
                     >
-                      <option value="" className="bg-navy-900">— Choose floor —</option>
-                      {DELIVERY_FLOORS.map(f => (
-                        <option key={f} value={f} className="bg-navy-900">{f}</option>
+                      <option value="" className="bg-navy-900">— Choose location —</option>
+                      {DELIVERY_LOCATIONS.map(l => (
+                        <option key={l.label} value={l.label} className="bg-navy-900">{l.label} — ₹{l.fee}</option>
                       ))}
                     </select>
                   </div>

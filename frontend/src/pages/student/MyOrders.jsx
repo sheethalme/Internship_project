@@ -56,7 +56,7 @@ function OrderStepper({ status, isDelivery }) {
 const TERMINAL = ['picked_up', 'delivered', 'cancelled'];
 
 export default function MyOrders() {
-  const { orders, updateOrderStatus } = useOrders();
+  const { orders } = useOrders();
   const { user } = useAuth();
   const { addItem, setIsOpen } = useCart();
   const { menuItems } = useCanteens();
@@ -76,17 +76,6 @@ export default function MyOrders() {
     const d = new Date(o.placed_at), now = new Date();
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).reduce((s, o) => s + o.total_amount, 0);
-
-  const simAdvance = (order) => {
-    const isDelivery = order.fulfillment_type === 'delivery';
-    const next = isDelivery
-      ? { placed: 'accepted', accepted: 'preparing', preparing: 'out_for_delivery', out_for_delivery: 'delivered' }
-      : { placed: 'accepted', accepted: 'preparing', preparing: 'ready', ready: 'picked_up' };
-    if (next[order.status]) {
-      updateOrderStatus(order.order_id, next[order.status]);
-      toast(`Order status updated to: ${next[order.status].replace(/_/g, ' ')}`, 'order');
-    }
-  };
 
   const handleReorder = (order) => {
     order.items.forEach(item => {
@@ -214,11 +203,6 @@ export default function MyOrders() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2 pt-2">
-                    {!isTerminal && (
-                      <button onClick={() => simAdvance(order)} className="btn-gold text-xs px-3 py-2">
-                        Simulate Next Step
-                      </button>
-                    )}
                     {isTerminal && order.status !== 'cancelled' && (
                       <>
                         <button onClick={() => handleReorder(order)} className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 transition-colors">

@@ -2,7 +2,14 @@ const db = require('../config/db');
 const { generateQR } = require('../utils/qrGenerator');
 const { awardPoints, redeemPoints } = require('../utils/loyaltyEngine');
 
-const DELIVERY_FEE = 15.00;
+const getDeliveryFee = (location) => {
+  if (!location) return 0;
+  if (location.startsWith('Central Block')) return 5.00;
+  if (location === 'Block II')   return 10.00;
+  if (location === 'Block IV')   return 15.00;
+  if (location === 'R&D Block')  return 20.00;
+  return 15.00;
+};
 
 const genOrderCode = () => {
   const year = new Date().getFullYear();
@@ -49,7 +56,7 @@ exports.placeOrder = async (req, res) => {
     }
 
     // Add delivery fee
-    const deliveryFee = fulfillment_type === 'delivery' ? DELIVERY_FEE : 0;
+    const deliveryFee = fulfillment_type === 'delivery' ? getDeliveryFee(delivery_location) : 0;
     total += deliveryFee;
 
     const orderCode = genOrderCode();

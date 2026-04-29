@@ -1,24 +1,35 @@
-import { ShoppingBag, TrendingUp, Store, AlertCircle, RotateCcw, Clock, Star } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ShoppingBag, TrendingUp, Store, AlertCircle, RotateCcw, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useOrders } from '../../contexts/OrdersContext';
 import { useCanteens } from '../../contexts/CanteenContext';
-import { formatCurrency, generateRevenueData, getCapacityInfo, MOCK_ORDERS } from '../../data/mockData';
+import { api } from '../../api';
+import { formatCurrency, getCapacityInfo, DAYS } from '../../data/mockData';
+import { Star } from 'lucide-react';
 
 export default function AdminDashboard() {
-  const { orders, grievances, refunds } = useOrders();
   const { canteens } = useCanteens();
-  const revenueData = generateRevenueData(7);
-  const totalRevenue = revenueData.reduce((s, d) => s + d.revenue, 0);
-  const openGrievances = grievances.filter(g => g.status === 'open').length;
-  const pendingRefunds = refunds.filter(r => ['requested', 'under_review', 'approved'].includes(r.status)).length;
+  const [dash, setDash]       = useState(null);
+  const [revenueData, setRevenueData] = useState([]);
+
+  useEffect(() => {
+    api.get('/admin/dashboard').then(setDash).catch(() => {});
+    api.get('/admin/analytics').then(d => {
+      const chart = (d.revenue_7days || []).map(r => ({
+        day: new Date(r.date).toLocaleDateString('en-IN', { weekday: 'short' }),
+        revenue: parseFloat(r.revenue),
+        orders:  parseInt(r.orders),
+      }));
+      setRevenueData(chart);
+    }).catch(() => {});
+  }, []);
 
   const kpis = [
-    { icon: <ShoppingBag size={20} />, label: 'Orders Today', value: 142, color: 'text-blue-400', sub: '+12% vs yesterday' },
-    { icon: <TrendingUp size={20} />, label: 'Revenue Today', value: formatCurrency(totalRevenue / 7), color: 'text-green-400', sub: 'All canteens' },
-    { icon: <Store size={20} />, label: 'Active Canteens', value: canteens.filter(c => c.status === 'open').length, color: 'text-gold-400', sub: `${canteens.length} total` },
-    { icon: <AlertCircle size={20} />, label: 'Open Grievances', value: openGrievances, color: 'text-red-400', sub: 'Needs attention' },
-    { icon: <RotateCcw size={20} />, label: 'Pending Refunds', value: pendingRefunds, color: 'text-yellow-400', sub: 'Awaiting approval' },
-    { icon: <Clock size={20} />, label: 'Avg Wait Time', value: '8 mins', color: 'text-purple-400', sub: 'Campus average' },
+    { icon: <ShoppingBag size={20} />, label: 'Orders Today',    value: dash?.total_orders    ?? '—', color: 'text-blue-400',   sub: 'All canteens' },
+    { icon: <TrendingUp  size={20} />, label: 'Revenue Today',   value: dash ? formatCurrency(dash.revenue) : '—', color: 'text-green-400',  sub: 'All canteens' },
+    { icon: <Store       size={20} />, label: 'Active Canteens', value: dash?.active_canteens ?? canteens.filter(c => c.status === 'open').length, color: 'text-gold-400',  sub: `${canteens.length} total` },
+    { icon: <AlertCircle size={20} />, label: 'Open Grievances', value: dash?.open_grievances ?? '—', color: 'text-red-400',    sub: 'Needs attention' },
+    { icon: <RotateCcw   size={20} />, label: 'Pending Refunds', value: dash?.pending_refunds ?? '—', color: 'text-yellow-400', sub: 'Awaiting approval' },
+    { icon: <Clock       size={20} />, label: 'Avg Wait Time',   value: dash?.avg_wait_time   ?? '—', color: 'text-purple-400', sub: 'Campus average' },
   ];
 
   const CustomTooltip = ({ active, payload, label }) => {
@@ -53,20 +64,24 @@ export default function AdminDashboard() {
 
       {/* Revenue chart */}
       <div className="glass-card p-5">
-        <h3 className="text-white font-bold mb-4">Campus-wide Revenue (7 Days)</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-            <XAxis dataKey="day" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
-            <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <h3 className="text-white font-bold mb-4">Campus-wide Revenue (Last 7 Days)</h3>
+        {revenueData.length === 0 ? (
+          <p className="text-white/30 text-sm text-center py-10">No order data yet</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={revenueData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="day" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="orders"  fill="#3b82f6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
-      {/* Canteen status cards */}
+      {/* Canteen status */}
       <div>
         <h3 className="text-white font-bold mb-4">Canteen Status</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

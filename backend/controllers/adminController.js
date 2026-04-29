@@ -145,13 +145,21 @@ exports.getAnalytics = async (req, res) => {
     const [canteenStats] = await db.query(
       `SELECT c.canteen_id, c.name, c.avg_rating,
               COUNT(o.order_id) as total_orders,
-              COALESCE(SUM(o.total_amount), 0) as revenue
+              COALESCE(SUM(o.total_amount), 0) as revenue,
+              (SELECT COUNT(*) FROM orders o2 WHERE o2.canteen_id = c.canteen_id AND o2.status NOT IN ('picked_up','delivered','cancelled')) as active_orders
        FROM canteens c LEFT JOIN orders o ON c.canteen_id = o.canteen_id AND o.status NOT IN ('cancelled')
        GROUP BY c.canteen_id`
+    );
+    const [revenue7] = await db.query(
+      `SELECT DATE(placed_at) as date, DAYNAME(placed_at) as day_name,
+              COALESCE(SUM(total_amount), 0) as revenue, COUNT(*) as orders
+       FROM orders WHERE status != 'cancelled'
+       AND placed_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+       GROUP BY DATE(placed_at), DAYNAME(placed_at) ORDER BY date`
     );
     const [loyaltyStats] = await db.query(
       'SELECT SUM(points_earned) as total_issued, SUM(points_redeemed) as total_redeemed FROM loyalty_log'
     );
-    res.json({ heatmap, canteen_stats: canteenStats, loyalty: loyaltyStats[0] });
+    res.json({ heatmap, canteen_stats: canteenStats, revenue_7days: revenue7, loyalty: loyaltyStats[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };

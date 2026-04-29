@@ -1,21 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { TrendingUp, ShoppingBag, Star, Clock, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCanteens } from '../../contexts/CanteenContext';
-import { useOrders } from '../../contexts/OrdersContext';
 import { useToast } from '../../contexts/ToastContext';
-import { CANTEENS, formatCurrency, VENDOR_QUEUE_ORDERS } from '../../data/mockData';
+import { api } from '../../api';
+import { formatCurrency } from '../../data/mockData';
 
 export default function VendorDashboard() {
   const { user } = useAuth();
   const { canteens, updateCanteenStatus } = useCanteens();
-  const { orders } = useOrders();
   const { toast } = useToast();
 
   const canteen = canteens.find(c => c.canteen_id === user?.canteen_id);
-  const myOrders = (VENDOR_QUEUE_ORDERS[user?.canteen_id] || []);
-  const todayRevenue = myOrders.reduce((s, o) => s + o.total, 0) + 3420;
-  const pendingOrders = myOrders.filter(o => o.status === 'placed').length;
+
+  const [stats, setStats] = useState({ total_orders: 0, revenue: 0, pending_orders: 0, avg_rating: canteen?.avg_rating || 0 });
+  const [liveOrders, setLiveOrders] = useState([]);
+
+  useEffect(() => {
+    api.get('/vendor/dashboard').then(setStats).catch(() => {});
+    const fetchLive = () => api.get('/vendor/orders/live').then(data => {
+      setLiveOrders(data.map(o => ({
+        ...o,
+        total: o.total_amount,
+        items: (o.items || []).map(i => ({ name: i.name, qty: i.quantity ?? i.qty })),
+      })));
+    }).catch(() => {});
+    fetchLive();
+    const interval = setInterval(fetchLive, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   const cycleStatus = () => {
     const next = { open: 'closed', closed: 'unavailable', unavailable: 'open' };
@@ -24,11 +37,11 @@ export default function VendorDashboard() {
     toast(`Canteen status set to: ${newStatus}`, newStatus === 'open' ? 'success' : 'warning');
   };
 
-  const stats = [
-    { icon: <ShoppingBag size={20} />, label: 'Orders Today', value: myOrders.length + 24, color: 'text-blue-400' },
-    { icon: <TrendingUp size={20} />, label: 'Revenue Today', value: formatCurrency(todayRevenue), color: 'text-green-400' },
-    { icon: <Clock size={20} />, label: 'Pending', value: pendingOrders, color: 'text-yellow-400' },
-    { icon: <Star size={20} />, label: 'Avg Rating', value: canteen?.avg_rating || '—', color: 'text-gold-400' },
+  const statCards = [
+    { icon: <ShoppingBag size={20} />, label: 'Orders Today', value: stats.total_orders, color: 'text-blue-400' },
+    { icon: <TrendingUp size={20} />, label: 'Revenue Today', value: formatCurrency(stats.revenue), color: 'text-green-400' },
+    { icon: <Clock size={20} />, label: 'Pending', value: stats.pending_orders, color: 'text-yellow-400' },
+    { icon: <Star size={20} />, label: 'Avg Rating', value: stats.avg_rating || '—', color: 'text-gold-400' },
   ];
 
   return (
@@ -53,7 +66,7 @@ export default function VendorDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s, i) => (
+        {statCards.map((s, i) => (
           <div key={i} className="stat-card">
             <div className={`${s.color} mb-2`}>{s.icon}</div>
             <p className="text-2xl font-black text-white">{s.value}</p>
@@ -66,13 +79,13 @@ export default function VendorDashboard() {
       <div className="glass-card p-5">
         <h3 className="text-white font-bold mb-4 flex items-center gap-2">
           <ShoppingBag size={18} className="text-gold-400" /> Live Queue
-          <span className="bg-gold-500/20 text-gold-400 text-xs px-2 py-0.5 rounded-full ml-1">{myOrders.length} orders</span>
+          <span className="bg-gold-500/20 text-gold-400 text-xs px-2 py-0.5 rounded-full ml-1">{liveOrders.length} orders</span>
         </h3>
-        {myOrders.length === 0 ? (
+        {liveOrders.length === 0 ? (
           <p className="text-white/40 text-sm text-center py-6">No active orders in queue</p>
         ) : (
           <div className="space-y-2">
-            {myOrders.slice(0, 3).map(o => (
+            {liveOrders.slice(0, 3).map(o => (
               <div key={o.order_id} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
                 <div>
                   <p className="text-white text-sm font-semibold">{o.student_name}</p>
@@ -84,7 +97,7 @@ export default function VendorDashboard() {
                 </div>
               </div>
             ))}
-            {myOrders.length > 3 && <p className="text-white/40 text-xs text-center pt-1">+{myOrders.length - 3} more in queue</p>}
+            {liveOrders.length > 3 && <p className="text-white/40 text-xs text-center pt-1">+{liveOrders.length - 3} more in queue</p>}
           </div>
         )}
       </div>

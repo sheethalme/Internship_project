@@ -26,18 +26,20 @@ export function OrdersProvider({ children }) {
     try {
       const { role } = JSON.parse(auth);
       if (role === 'student') {
-        api.get('/orders/my').then(data => {
-          const fetched = normalizeOrders(data);
-          // Merge: preserve any locally-simulated status advances rather than overwriting
-          setOrders(prev => {
-            if (prev.length === 0) return fetched;
-            return fetched.map(o => {
+        const fetchOrders = () => {
+          api.get('/orders/my').then(data => {
+            const fetched = normalizeOrders(data);
+            // Use API status (real vendor updates), only preserve local 'rated' flag
+            setOrders(prev => fetched.map(o => {
               const local = prev.find(p => p.order_id === o.order_id);
-              return local ? { ...o, status: local.status, rated: local.rated } : o;
-            });
-          });
-        }).catch(() => {});
+              return local ? { ...o, rated: local.rated } : o;
+            }));
+          }).catch(() => {});
+        };
+        fetchOrders();
+        const interval = setInterval(fetchOrders, 8000);
         api.get('/bulk-orders/my').then(data => setBulkOrders(data)).catch(() => {});
+        return () => clearInterval(interval);
       }
     } catch {}
   }, []);

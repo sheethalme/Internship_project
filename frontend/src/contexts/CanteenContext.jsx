@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { CANTEENS, MENU_ITEMS } from '../data/mockData';
+import { api } from '../api';
 
 const CanteenContext = createContext();
 
@@ -9,9 +10,24 @@ export function CanteenProvider({ children }) {
     catch { return CANTEENS; }
   });
   const [menuItems, setMenuItems] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gg_menu') || JSON.stringify(MENU_ITEMS)); }
-    catch { return MENU_ITEMS; }
+    localStorage.removeItem('gg_menu');
+    return MENU_ITEMS;
   });
+
+  // Sync canteens from API so active_orders, status, avg_rating are real
+  useEffect(() => {
+    const fetchCanteens = () => {
+      api.get('/canteens').then(data => {
+        setCanteens(prev => prev.map(c => {
+          const live = data.find(d => d.canteen_id === c.canteen_id);
+          return live ? { ...c, active_orders: live.active_orders, capacity_pct: live.capacity_pct, avg_rating: live.avg_rating, status: live.status } : c;
+        }));
+      }).catch(() => {});
+    };
+    fetchCanteens();
+    const interval = setInterval(fetchCanteens, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const saveCanteens = (data) => {
     setCanteens(data);
@@ -20,7 +36,6 @@ export function CanteenProvider({ children }) {
 
   const saveMenu = (data) => {
     setMenuItems(data);
-    localStorage.setItem('gg_menu', JSON.stringify(data));
   };
 
   const updateCanteenStatus = (canteen_id, status) => {

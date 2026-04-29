@@ -1,21 +1,31 @@
-import { useState } from 'react';
-import { Star, Trash2, Flag } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Star, Trash2 } from 'lucide-react';
 import { useCanteens } from '../../contexts/CanteenContext';
 import { useToast } from '../../contexts/ToastContext';
-import { MOCK_REVIEWS } from '../../data/mockData';
+import { api } from '../../api';
 import StarRating from '../../components/ui/StarRating';
 
 export default function AdminReviews() {
   const { canteens } = useCanteens();
   const { toast } = useToast();
-  const [reviews, setReviews] = useState(MOCK_REVIEWS);
+  const [reviews, setReviews] = useState([]);
   const [canteenFilter, setCanteenFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
 
-  const filtered = reviews.filter(r => canteenFilter === 'all' || r.canteen_id === parseInt(canteenFilter));
+  useEffect(() => {
+    setLoading(true);
+    const url = canteenFilter !== 'all' ? `/admin/reviews?canteen_id=${canteenFilter}` : '/admin/reviews';
+    api.get(url).then(data => { setReviews(data); setLoading(false); }).catch(() => setLoading(false));
+  }, [canteenFilter]);
 
-  const removeReview = (id) => {
-    setReviews(prev => prev.filter(r => r.review_id !== id));
-    toast('Review removed', 'info');
+  const removeReview = async (id) => {
+    try {
+      await api.delete(`/admin/reviews/${id}`);
+      setReviews(prev => prev.filter(r => r.review_id !== id));
+      toast('Review removed', 'info');
+    } catch {
+      toast('Failed to remove review', 'error');
+    }
   };
 
   const canteenAvg = (id) => {
@@ -26,18 +36,17 @@ export default function AdminReviews() {
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-black text-white">Reviews Center</h1>
+        <h1 className="text-2xl font-black text-white flex items-center gap-2"><Star size={22} className="text-gold-400" /> Reviews Center</h1>
         <p className="text-white/50 text-sm mt-1">{reviews.length} total reviews</p>
       </div>
 
-      {/* Canteen rating summary */}
+      {/* Per-canteen averages */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {canteens.map(c => (
           <div key={c.canteen_id} className="glass-card p-4 text-center">
             <p className="text-white font-bold text-sm mb-2 truncate">{c.name}</p>
-            <p className="text-gold-400 text-3xl font-black">{canteenAvg(c.canteen_id)}</p>
-            <StarRating rating={parseFloat(canteenAvg(c.canteen_id)) || 0} size={12} />
-            <p className="text-white/40 text-xs mt-1">{reviews.filter(r => r.canteen_id === c.canteen_id).length} reviews</p>
+            <p className="text-gold-400 text-3xl font-black">{parseFloat(c.avg_rating || 0).toFixed(1)}</p>
+            <StarRating rating={parseFloat(c.avg_rating || 0)} size={12} />
           </div>
         ))}
       </div>
@@ -49,10 +58,16 @@ export default function AdminReviews() {
         </select>
       </div>
 
-      <div className="space-y-3">
-        {filtered.map(r => {
-          const canteen = canteens.find(c => c.canteen_id === r.canteen_id);
-          return (
+      {loading ? (
+        <div className="text-center py-12"><p className="text-white/30">Loading reviews...</p></div>
+      ) : reviews.length === 0 ? (
+        <div className="text-center py-12">
+          <Star size={40} className="text-white/10 mx-auto mb-3" strokeWidth={1} />
+          <p className="text-white/30">No reviews yet</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {reviews.map(r => (
             <div key={r.review_id} className="glass-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
@@ -62,23 +77,20 @@ export default function AdminReviews() {
                     </div>
                     <div>
                       <p className="text-white font-semibold text-sm">{r.student_name || 'Anonymous'}</p>
-                      <p className="text-white/40 text-xs">{canteen?.name}</p>
+                      <p className="text-white/40 text-xs">{r.canteen_name}</p>
                     </div>
                     <StarRating rating={r.rating} size={13} />
                   </div>
                   {r.comment && <p className="text-white/70 text-sm italic">"{r.comment}"</p>}
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => removeReview(r.review_id)} className="p-2 hover:bg-red-500/20 rounded-xl text-white/30 hover:text-red-400 transition-colors" title="Remove review">
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+                <button onClick={() => removeReview(r.review_id)} className="p-2 hover:bg-red-500/20 rounded-xl text-white/30 hover:text-red-400 transition-colors" title="Remove review">
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
-          );
-        })}
-        {filtered.length === 0 && <div className="text-center py-12"><p className="text-white/30">No reviews found</p></div>}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -24,3 +24,31 @@ exports.getByCanteen = async (req, res) => {
     res.json(reviews);
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
+
+exports.adminGetAll = async (req, res) => {
+  try {
+    const { canteen_id } = req.query;
+    let query = `SELECT r.*, s.name as student_name, c.name as canteen_name
+                 FROM reviews r
+                 JOIN students s ON r.student_id = s.student_id
+                 JOIN canteens c ON r.canteen_id = c.canteen_id`;
+    const params = [];
+    if (canteen_id) { query += ' WHERE r.canteen_id = ?'; params.push(canteen_id); }
+    query += ' ORDER BY r.created_at DESC';
+    const [reviews] = await db.query(query, params);
+    res.json(reviews);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
+exports.adminDelete = async (req, res) => {
+  try {
+    const [[review]] = await db.query('SELECT canteen_id FROM reviews WHERE review_id = ?', [req.params.id]);
+    if (!review) return res.status(404).json({ error: 'Review not found' });
+    await db.query('DELETE FROM reviews WHERE review_id = ?', [req.params.id]);
+    await db.query(
+      'UPDATE canteens SET avg_rating = COALESCE((SELECT AVG(rating) FROM reviews WHERE canteen_id = ?), 0) WHERE canteen_id = ?',
+      [review.canteen_id, review.canteen_id]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};

@@ -34,15 +34,16 @@ gourmetgo/
 │   ├── config/
 │   │   └── db.js                  # MySQL connection pool (socket-based)
 │   ├── controllers/
-│   │   ├── authController.js      # Register/login logic for all roles
-│   │   ├── menuController.js      # Canteen + menu item CRUD
-│   │   ├── orderController.js     # Order placement, tracking, cancellation
-│   │   ├── vendorController.js    # Vendor dashboard, order queue, analytics
-│   │   ├── adminController.js     # Admin dashboard, grievance/refund mgmt
-│   │   ├── paymentController.js   # Simulated payment flow
-│   │   ├── refundController.js    # Refund request + processing
-│   │   ├── grievanceController.js # Grievance creation and status updates
-│   │   └── reviewController.js    # Review submission + canteen rating update
+│   │   ├── authController.js           # Register/login logic for all roles
+│   │   ├── menuController.js           # Canteen + menu item CRUD
+│   │   ├── orderController.js          # Order placement, tracking, cancellation
+│   │   ├── vendorController.js         # Vendor dashboard, order queue, analytics
+│   │   ├── adminController.js          # Admin dashboard, grievance/refund mgmt
+│   │   ├── paymentController.js        # Simulated payment flow
+│   │   ├── refundController.js         # Refund request + processing
+│   │   ├── grievanceController.js      # Grievance creation and status updates
+│   │   ├── reviewController.js         # Review submission + canteen rating update + admin manage
+│   │   └── notificationController.js   # Per-user notifications CRUD (real DB)
 │   ├── middleware/
 │   │   ├── authMiddleware.js      # JWT verification + role-based access
 │   │   └── uploadMiddleware.js    # Multer file upload handler
@@ -55,11 +56,14 @@ gourmetgo/
 │   │   ├── payments.js            # /api/payments/*
 │   │   ├── refunds.js             # /api/refunds/*
 │   │   ├── reviews.js             # /api/reviews/*
-│   │   └── grievances.js          # /api/grievances/*
+│   │   ├── grievances.js          # /api/grievances/*
+│   │   └── notifications.js       # /api/notifications/*
 │   ├── utils/
 │   │   ├── loyaltyEngine.js       # Award and redeem loyalty points logic
 │   │   ├── qrGenerator.js         # QR code data URI generation
 │   │   └── slotUtils.js           # Pickup slot generation + recommendation
+│   ├── scripts/
+│   │   └── fetchFoodImages.js     # One-time Pexels migration script (updates mockData.js image URLs)
 │   ├── schema.sql                 # Run first — creates all 12 tables
 │   ├── seed.sql                   # Run second — inserts all demo data
 │   ├── seed.js                    # (Alternative) Node.js seed script
@@ -132,7 +136,7 @@ gourmetgo/
     │   │       └── Confetti.jsx           # Order success animation
     │   │
     │   └── data/
-    │       └── mockData.js        # Static canteen/menu data + helpers
+    │       └── mockData.js        # Static canteen/menu data + helpers (food images from Pexels CDN)
     │
     ├── index.html
     ├── vite.config.js
@@ -278,15 +282,16 @@ This is the most complex operation in the system. It uses a **database transacti
    - Queries `menu_items` to check it exists, belongs to the right canteen, is available, and has sufficient stock
    - Accumulates total price
 3. **Apply loyalty discount** — if `loyalty_used > 0`, calculates discount as `floor(loyalty_used / 100) * 10` (100 coins = ₹10 off)
-4. **Generate order code** — format `GG-YYYY-XXXXX` with a random 5-digit number
-5. **Generate QR code** — calls `qrGenerator.js` which uses the `qrcode` library to convert the order code string into a base64 PNG data URI
-6. **Insert into `orders`** — stores all order metadata
-7. **Insert into `order_items`** — one row per item with quantity and unit price at time of order (price is captured so future price changes don't affect past orders)
-8. **Decrement stock** — `stock_remaining -= quantity` for each item; if stock hits 0, sets `is_available = FALSE`
-9. **Log loyalty redemption** — if coins were used, calls `redeemPoints` which deducts from student's balance and logs to `loyalty_log`
-10. **Create notifications** — inserts notification rows for both the vendor and the student
-11. **Commit transaction** — all changes are saved atomically
-12. If any step fails → **rollback** → no partial data is saved
+4. **Calculate delivery fee** — if `fulfillment_type = 'delivery'`, applies a location-based fee: Central Block floors ₹5, Block II ₹10, Block IV ₹15, R&D Block ₹20
+5. **Generate order code** — format `GG-YYYY-XXXXX` with a random 5-digit number
+6. **Generate QR code** — calls `qrGenerator.js` which uses the `qrcode` library to convert the order code string into a base64 PNG data URI
+7. **Insert into `orders`** — stores all order metadata including `fulfillment_type`, `delivery_location`, and `delivery_fee`
+8. **Insert into `order_items`** — one row per item with quantity and unit price at time of order (price is captured so future price changes don't affect past orders)
+9. **Decrement stock** — `stock_remaining -= quantity` for each item; if stock hits 0, sets `is_available = FALSE`
+10. **Log loyalty redemption** — if coins were used, calls `redeemPoints` which deducts from student's balance and logs to `loyalty_log`
+11. **Create notifications** — inserts notification rows for both the vendor and the student (labeled `🛵 DELIVERY` or `🏃 Pickup`)
+12. **Commit transaction** — all changes are saved atomically
+13. If any step fails → **rollback** → no partial data is saved
 
 ### Loyalty Engine (`utils/loyaltyEngine.js`)
 
@@ -332,6 +337,33 @@ Each transition is a separate API endpoint. When an order reaches `picked_up`, `
 - 30-day revenue grouped by date
 - Top 5 most-ordered items
 - Order heatmap grouped by day-of-week and hour (used to show peak times)
+- Fulfillment split (pickup vs delivery counts and delivery revenue)
+- Completion stats: total completed, pending, and cancelled orders for all time
+
+### Notification System (`controllers/notificationController.js`)
+
+Serves real per-user notifications stored in the `notifications` table (created by `orderController.js`, `grievanceController.js`, etc.).
+
+- `GET /api/notifications` — returns the 50 most recent notifications for the logged-in user, filtered by their `user_id` and `user_role`
+- `PUT /api/notifications/:id/read` — marks a single notification as read (`is_read = 1`)
+- `PUT /api/notifications/read-all` — marks all of the user's unread notifications as read in one query
+- `DELETE /api/notifications/:id` — permanently removes a notification (dismiss)
+
+All routes require a valid JWT. The controller matches on both `user_id` and `user_role` so a student and a vendor who share the same numeric ID cannot read each other's notifications.
+
+### Admin Reviews (`controllers/reviewController.js`)
+
+Two new admin-only endpoints added:
+
+- `GET /api/admin/reviews?canteen_id=` — returns all reviews joined with student name and canteen name; optionally filtered by `canteen_id`
+- `DELETE /api/admin/reviews/:id` — deletes a review and immediately recalculates and updates `canteens.avg_rating` for the affected canteen using `AVG(rating)` from remaining reviews
+
+### Admin Analytics Enhancements (`controllers/adminController.js`)
+
+The `GET /api/admin/analytics` response now includes two additional fields:
+
+- `revenue_7days` — daily revenue and order count for the last 7 days (grouped by `DATE(placed_at)` and `DAYNAME(placed_at)`), used to render the campus revenue bar chart with real data
+- `active_orders` per canteen in `canteen_stats` — count of orders currently in an active (non-terminal) state per canteen, used in the canteen comparison card
 
 ### Payment System (`controllers/paymentController.js`)
 
@@ -432,16 +464,20 @@ A student can have items from multiple canteens in their cart simultaneously. Ea
 **On mount:** If a student JWT token exists in `localStorage`, automatically fetches order history from `GET /api/orders/my` and populates state.
 
 **`placeOrder(orderData)`** — the key function:
-1. Calls `POST /api/orders` with canteen_id, pickup_slot, items array, loyalty_used
+1. Calls `POST /api/orders` with canteen_id, pickup_slot, items array, loyalty_used, fulfillment_type, delivery_location
 2. On success, calls `POST /api/payments/initiate` then `POST /api/payments/confirm` to simulate payment
 3. Builds a normalized order object and adds it to local state
 4. Returns the order object so `CheckoutModal` can display the order code and QR
+
+**Order polling:** On mount, and every **8 seconds** thereafter, fetches `GET /api/orders/my` to sync the latest real order statuses from the database. Local state only preserves the `rated` flag (whether the student has already rated the order) — all status fields come from the API. The "Simulate Next Step" debug button has been removed.
 
 **Grievances and Refunds** remain in `localStorage` (not yet wired to the API) — they use the mock data as initial state and persist changes locally.
 
 ### Canteen Context (`contexts/CanteenContext.jsx`)
 
-Currently uses the **static mock data** from `mockData.js` for canteen listings and menus. The item IDs in the mock data (101–117, 201–215, etc.) intentionally match the IDs seeded into the real database, so when a student adds item 101 (Masala Dosa) to cart and places an order, the backend correctly finds item 101 in the `menu_items` table.
+Uses the **static mock data** from `mockData.js` for canteen listings and menus. The item IDs in the mock data (101–117, 201–215, etc.) intentionally match the IDs seeded into the real database, so when a student adds item 101 (Masala Dosa) to cart and places an order, the backend correctly finds item 101 in the `menu_items` table.
+
+Menu item images are served from **Pexels CDN** — all 62 food items have verified image URLs fetched via `backend/scripts/fetchFoodImages.js`. Menu items are no longer cached in `localStorage` (the cache was removed to ensure the latest `mockData.js` images are always used). The context still polls `GET /api/canteens` every 30 seconds to sync live `active_orders`, `capacity_pct`, `avg_rating`, and `status` fields from the database.
 
 Vendor menu operations (toggle availability, restock, add/edit/delete items) update local state. These are not yet wired to the API.
 
@@ -459,6 +495,12 @@ The checkout flow has three steps:
 - If student has ≥ 100 loyalty coins, shows option to apply discount
 - Discount formula: `floor(loyalty_points / 100) * 10` = ₹10 off per 100 coins
 - Payment methods: UPI, Card, GourmetWallet (wallet balance deducted locally)
+- **Delivery fee is location-based** — the dropdown shows all delivery locations with their fee inline:
+  - Central Block (all floors): ₹5
+  - Block II: ₹10
+  - Block IV: ₹15
+  - R&D Block: ₹20
+  - Fee chip updates live as the student picks a location
 - On "Pay" button: calls `await placeOrder(...)` which hits the real API
 
 **Step 3 — Success:**
@@ -477,6 +519,54 @@ The checkout flow has three steps:
   - `preparing` → `PUT /api/vendor/orders/:id/ready`
   - `ready` → `PUT /api/vendor/orders/:id/complete` (triggers loyalty point award)
 - Updates local state immediately on button click (optimistic update) so UI feels instant
+
+### Vendor Dashboard (`pages/vendor/VendorDashboard.jsx`)
+
+Previously used hardcoded mock values. Now fully wired to real APIs:
+
+- On mount, calls `GET /api/vendor/dashboard` to populate the four stat cards: **Orders Today**, **Revenue Today**, **Pending**, and **Avg Rating** — all from live database data
+- Also fetches `GET /api/vendor/orders/live` (polling every 8 seconds) to display the live queue preview (up to 3 orders shown inline, with a "+N more" count)
+
+### Notifications Context (`contexts/NotificationsContext.jsx`)
+
+Previously stored in `localStorage` as mock data. Now fully wired to the real `notifications` table:
+
+- On mount (and every **15 seconds**), calls `GET /api/notifications` to fetch the 50 most recent notifications for the logged-in user
+- `markRead(id)` — optimistic local update + `PUT /api/notifications/:id/read`
+- `markAllRead()` — optimistic local update + `PUT /api/notifications/read-all`
+- `dismiss(id)` — removes from local state + `DELETE /api/notifications/:id`
+- Old `localStorage` cache (`gg_notifs`) is cleared on mount
+- Notifications are created server-side by `orderController.js` (order placed/confirmed), `vendorController.js` (order ready for pickup), and `grievanceController.js` (grievance replies)
+
+### Admin Dashboard (`pages/admin/AdminDashboard.jsx`)
+
+Previously used mock/hardcoded stats. Now fully wired to real APIs:
+
+- Calls `GET /api/admin/dashboard` for live KPIs: total orders today, revenue today, active canteens, open grievances, pending refunds
+- Calls `GET /api/admin/analytics` for the 7-day campus revenue bar chart (real `revenue_7days` data from DB)
+- Falls back to `—` while loading; shows "No order data yet" placeholder if the DB has no orders
+
+### Admin Analytics (`pages/admin/AdminAnalytics.jsx`)
+
+Previously used mock data (`DEMAND_FORECAST`, `HEATMAP_DATA`, `generateRevenueData`). Now fully wired to real APIs:
+
+- Calls `GET /api/admin/analytics` on mount for all three sections
+- **Revenue chart** — built from `revenue_7days` array (real daily revenue + order counts for last 7 days)
+- **Peak Hours Heatmap** — built from `heatmap` rows (MySQL `DAYOFWEEK` converted to Mon-first index); heatmap intensity scales dynamically to the actual max order count rather than a hardcoded ceiling
+- **Canteen Comparison** — shows real `total_orders`, `revenue`, `avg_rating`, and `active_orders` per canteen from `canteen_stats`
+- The static "7-Day Demand Forecast" section has been removed (it was mock-only data with no real backing)
+
+### Admin Reviews (`pages/admin/AdminReviews.jsx`)
+
+Previously used `MOCK_REVIEWS` from mockData. Now fully wired to real APIs:
+
+- Loads reviews from `GET /api/admin/reviews` on mount and whenever the canteen filter changes
+- Delete calls `DELETE /api/admin/reviews/:id` which also recalculates the canteen's `avg_rating` server-side
+- Shows a loading state while fetching
+
+### My Orders — Polling (`pages/student/MyOrders.jsx`)
+
+- The "Simulate Next Step" debug button has been removed — order status is now always fetched live from the API (via `OrdersContext` polling every 8 seconds), so simulating status locally is no longer needed
 
 ---
 
@@ -532,7 +622,7 @@ The checkout flow has three steps:
 | daily_stock_limit | INT | Resets on restock |
 | stock_remaining | INT | Decremented on order |
 | is_available | TINYINT(1) DEFAULT 1 | Auto-set to 0 when stock hits 0 |
-| image_url | VARCHAR(500) | Unsplash URL |
+| image_url | VARCHAR(500) | Pexels CDN URL (fetched via fetchFoodImages.js script) |
 | created_at | TIMESTAMP | |
 
 ### `orders`
@@ -548,6 +638,9 @@ The checkout flow has three steps:
 | total_amount | DECIMAL(10,2) | Final amount after discounts |
 | loyalty_used | INT DEFAULT 0 | Points redeemed |
 | qr_code | LONGTEXT | Base64 PNG data URI |
+| fulfillment_type | ENUM('pickup','delivery') DEFAULT 'pickup' | |
+| delivery_location | VARCHAR(200) NULL | e.g. "Block II" |
+| delivery_fee | DECIMAL(8,2) DEFAULT 0 | Location-based: ₹5/10/15/20 |
 | status | ENUM('placed','accepted','preparing','ready','picked_up','cancelled') | |
 | placed_at | TIMESTAMP | Auto-set |
 | ready_at | TIMESTAMP NULL | Set when vendor marks ready |
@@ -985,6 +1078,20 @@ npm run dev
 | POST | / | Student | Submit review (order must be picked_up) |
 | GET | /canteen/:canteen_id | Any | All reviews for a canteen |
 
+### Notifications — `/api/notifications`
+| Method | Endpoint | Auth | Notes |
+|--------|----------|------|-------|
+| GET | / | Any (token) | Returns 50 most recent notifications for logged-in user |
+| PUT | /read-all | Any (token) | Mark all notifications as read |
+| PUT | /:id/read | Any (token) | Mark a single notification as read |
+| DELETE | /:id | Any (token) | Dismiss/delete a notification |
+
+### Admin Reviews — `/api/admin/reviews`
+| Method | Endpoint | Auth | Notes |
+|--------|----------|------|-------|
+| GET | /reviews | Admin | All reviews; filter by ?canteen_id= |
+| DELETE | /reviews/:id | Admin | Delete review + recalculate canteen avg_rating |
+
 ---
 
 ## What Has Been Completed
@@ -1018,9 +1125,15 @@ npm run dev
 - [x] Admin canteen management
 - [x] Admin grievance handling
 - [x] Admin refund processing
-- [x] Admin analytics (cross-canteen heatmap, loyalty stats)
+- [x] Admin analytics (cross-canteen heatmap, loyalty stats) — now uses **real DB data**
+- [x] Admin reviews management — list + delete (with avg_rating recalculation)
+- [x] Notification system — real DB-backed `/api/notifications` with read/dismiss endpoints
+- [x] Location-based delivery fee (Central Block ₹5, Block II ₹10, Block IV ₹15, R&D ₹20)
+- [x] Vendor analytics completion stats (completed / pending / cancelled order totals)
 - [x] File upload middleware (Multer)
 - [x] MySQL socket connection fix for MySQL 9 on macOS
+- [x] Pexels CDN food images — all 62 menu items have verified image URLs (via fetchFoodImages.js migration script)
+- [x] Graceful broken-image fallback — broken `<img>` tags fade to a dark gradient instead of showing a `?`
 
 ### Frontend
 - [x] Landing page
@@ -1029,30 +1142,31 @@ npm run dev
 - [x] Admin authentication — connected to real API
 - [x] Student dashboard
 - [x] Canteen browsing with live capacity indicators
-- [x] Menu browsing with veg/category filters
+- [x] Menu browsing with veg/category filters and search
 - [x] Cart (multi-canteen support, localStorage persistence)
 - [x] Checkout modal (slot selection → payment → success)
-- [x] Order placement — connected to real API
+- [x] Order placement — connected to real API (pickup + delivery with location-based fee)
 - [x] QR code display on order confirmation
 - [x] Confetti animation on order success
-- [x] My Orders page with status stepper
+- [x] My Orders page with status stepper — polls real status every 8 seconds
 - [x] Loyalty page (GourmetCoins dashboard)
 - [x] Grievances page
 - [x] Refunds page
-- [x] Notifications page
-- [x] Vendor dashboard
+- [x] Notifications page — wired to real API (polls every 15 seconds)
+- [x] Vendor dashboard — wired to real API (live stats + live queue preview)
 - [x] Vendor order queue — connected to real API (polls every 8 seconds)
 - [x] Order status advancement through all stages
 - [x] Vendor menu management UI
-- [x] Vendor analytics (charts via Victory library)
+- [x] Vendor analytics (charts via Victory library, including real completion stats)
 - [x] Vendor grievances view
 - [x] Vendor refunds view
-- [x] Admin dashboard
+- [x] Admin dashboard — wired to real API (live KPIs + 7-day revenue chart)
 - [x] Admin orders management
 - [x] Admin canteens management
 - [x] Admin grievances management
 - [x] Admin refunds management
-- [x] Admin analytics
+- [x] Admin analytics — wired to real API (real heatmap, real revenue chart, real canteen comparison)
+- [x] Admin reviews management — wired to real API (list + delete)
 - [x] Dark theme (navy + gold design system)
 - [x] Toast notification system
 - [x] Responsive layout
@@ -1066,26 +1180,23 @@ npm run dev
 - [ ] **Wire Vendor Menu Management to real API** — add/edit/toggle/restock/delete menu items currently only update local state, not the database
 - [ ] **Wire Grievances to real API** — student grievance creation and vendor replies should persist to DB
 - [ ] **Wire Refunds to real API** — refund requests should persist to DB
-- [ ] **Wire Reviews to real API** — star ratings should be saved and update canteen avg_rating in DB
-- [ ] **Wire Notifications to real API** — fetch real notifications from DB instead of localStorage
+- [ ] **Wire Reviews to real API** — student star rating submission should be saved and update canteen avg_rating in DB
 - [ ] **Real slot data in checkout** — `CheckoutModal` uses `generateTimeSlots()` from mockData (static/random counts). It should call `GET /api/canteens/:id/slots` to get real order counts
 
 ### Medium Priority (Feature Completeness)
 - [ ] **Real payment gateway** — integrate Razorpay or Stripe instead of the simulated flow
-- [ ] **WebSocket / SSE for live updates** — currently the vendor queue polls every 8 seconds. Real-time push (Socket.io or Server-Sent Events) would be more efficient
+- [ ] **WebSocket / SSE for live updates** — vendor queue and student orders currently poll every 8 seconds. Real-time push (Socket.io or Server-Sent Events) would be more efficient and reduce server load
 - [ ] **Admin: Create vendor accounts** — currently vendors must be seeded directly into the DB. Admin should be able to create vendor accounts through the UI
 - [ ] **Actual demand forecasting model** — the core academic contribution of this project. Should include time-series analysis (e.g. ARIMA, Prophet, or LSTM) trained on order history to predict demand by canteen, day, and hour
 - [ ] **Pre-order flow for students** — the UI for scheduling next-day orders needs to be built out fully
 - [ ] **Image upload for menu items** — Multer is wired up on the backend but the frontend doesn't have a file picker for menu item images
 - [ ] **Student wallet top-up** — students can't add money to their GourmetWallet through the app yet
-- [ ] **Order history persistence** — on fresh login, student sees real order history from DB (partially done — fetches on mount but may have edge cases)
 
 ### Low Priority (Polish & Extras)
 - [ ] **Push notifications** — browser push or email notifications when order status changes
 - [ ] **Admin: Create/delete canteens** — currently only updates existing canteens
 - [ ] **Pagination** — admin order list is limited to 100 rows via SQL LIMIT; needs proper pagination for production
-- [ ] **Search in canteen menu** — item search within a canteen menu
-- [ ] **Reorder button** — "Reorder" in MyOrders adds items back to cart but needs to verify stock availability first
+- [ ] **Reorder button stock check** — "Reorder" in MyOrders adds items back to cart but does not verify current stock availability first
 - [ ] **JWT refresh tokens** — tokens expire in 7 days with no refresh mechanism; user is simply logged out
 - [ ] **Input validation** — backend does basic field checking but no schema-level validation (e.g. Joi or Zod)
 - [ ] **Rate limiting** — no rate limiting on auth endpoints; needed before production deployment
