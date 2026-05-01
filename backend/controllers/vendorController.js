@@ -28,12 +28,14 @@ exports.getDashboard = async (req, res) => {
 
 exports.getLiveOrders = async (req, res) => {
   try {
+    const today = new Date().toISOString().split('T')[0];
     const [orders] = await db.query(
       `SELECT o.*, s.name as student_name
        FROM orders o JOIN students s ON o.student_id = s.student_id
-       WHERE o.canteen_id = ? AND o.status NOT IN ('picked_up','delivered','cancelled')
+       WHERE o.canteen_id = ? 
+       AND (o.status NOT IN ('picked_up','delivered','cancelled') OR (o.status IN ('picked_up','delivered') AND DATE(o.placed_at) = ?))
        ORDER BY o.placed_at ASC`,
-      [req.user.canteen_id]
+      [req.user.canteen_id, today]
     );
     for (const o of orders) {
       const [items] = await db.query(
