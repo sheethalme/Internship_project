@@ -14,7 +14,14 @@ const request = async (method, path, body) => {
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem('gg_token');
+      localStorage.removeItem('gg_auth');
+      window.location.href = '/';
+    }
+    throw new Error(data.error || 'Request failed');
+  }
   return data;
 };
 

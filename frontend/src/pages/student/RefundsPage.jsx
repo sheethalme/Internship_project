@@ -22,8 +22,7 @@ export default function RefundsPage() {
 
   const myRefunds = refunds.filter(r => r.student_id === user?.student_id);
   const eligibleOrders = orders.filter(o =>
-    o.student_id === user?.student_id &&
-    o.status === 'picked_up' &&
+    o.status !== 'cancelled' &&
     !refunds.find(r => r.order_id === o.order_id)
   );
 
@@ -67,11 +66,14 @@ export default function RefundsPage() {
               className="input-dark appearance-none"
             >
               <option value="" className="bg-navy-900">Select an order...</option>
-              {eligibleOrders.map(o => (
-                <option key={o.order_id} value={o.order_id} className="bg-navy-900">
-                  {o.order_code} — {o.canteen_name} — {formatCurrency(o.total_amount)}
-                </option>
-              ))}
+              {eligibleOrders.map(o => {
+                const itemNames = o.items?.map(i => i.name).join(', ') || 'Items';
+                return (
+                  <option key={o.order_id} value={o.order_id} className="bg-navy-900">
+                    {o.order_code} — {o.canteen_name} ({itemNames}) — {formatCurrency(o.total_amount)}
+                  </option>
+                );
+              })}
             </select>
             <textarea
               placeholder="Reason for refund..."

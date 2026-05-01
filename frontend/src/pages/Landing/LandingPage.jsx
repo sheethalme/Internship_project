@@ -5,6 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Wifi, Zap, TrendingUp, Clock, Star, ChevronRight, Moon, Sun, GraduationCap, Store, Shield } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCanteens } from '../../contexts/CanteenContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getCapacityInfo } from '../../data/mockData';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -15,6 +16,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const { isDark, toggle } = useTheme();
   const { canteens } = useCanteens();
+  const { user, role, logout } = useAuth();
   const heroRef = useRef(null);
   const logoRef = useRef(null);
   const taglineRef = useRef(null);
@@ -116,9 +118,15 @@ export default function LandingPage() {
           <button onClick={toggle} className={`p-2 rounded-xl transition-colors ${isDark ? 'hover:bg-white/10 text-white/70' : 'hover:bg-gray-100 text-gray-600'}`}>
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <button onClick={() => navigate('/login/student')} className="btn-gold text-sm px-4 py-2 hidden sm:flex">
-            Sign In
-          </button>
+          {user ? (
+            <button onClick={() => navigate(`/${role}`)} className="btn-gold text-sm px-4 py-2 hidden sm:flex">
+              Dashboard
+            </button>
+          ) : (
+            <button onClick={() => navigate('/login/student')} className="btn-gold text-sm px-4 py-2 hidden sm:flex">
+              Sign In
+            </button>
+          )}
         </div>
       </nav>
 
@@ -156,27 +164,46 @@ export default function LandingPage() {
 
         {/* CTA Buttons */}
         <div ref={ctaRef} className="flex flex-col sm:flex-row gap-4 mt-10">
-          <button
-            onClick={() => navigate('/login/student')}
-            className="btn-gold flex items-center gap-3 text-base px-8 py-4"
-          >
-            <GraduationCap size={20} />
-            I'm a Student
-          </button>
-          <button
-            onClick={() => navigate('/login/vendor')}
-            className="btn-outline flex items-center gap-3 text-base px-8 py-4"
-          >
-            <Store size={20} />
-            I'm a Vendor
-          </button>
-          <button
-            onClick={() => navigate('/login/admin')}
-            className={`flex items-center gap-3 text-base px-8 py-4 rounded-xl font-semibold border transition-all hover:-translate-y-0.5 ${isDark ? 'border-white/10 text-white/70 hover:bg-white/5 hover:text-white' : 'border-navy-200 text-navy-600 hover:bg-navy-50'}`}
-          >
-            <Shield size={20} />
-            Admin Login
-          </button>
+          {user ? (
+            <>
+              <button
+                onClick={() => navigate(`/${role}`)}
+                className="btn-gold flex items-center justify-center gap-3 text-base px-8 py-4"
+              >
+                Go to Dashboard
+              </button>
+              <button
+                onClick={() => logout()}
+                className="btn-outline flex items-center justify-center gap-3 text-base px-8 py-4"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate('/login/student')}
+                className="btn-gold flex items-center gap-3 text-base px-8 py-4"
+              >
+                <GraduationCap size={20} />
+                I'm a Student
+              </button>
+              <button
+                onClick={() => navigate('/login/vendor')}
+                className="btn-outline flex items-center gap-3 text-base px-8 py-4"
+              >
+                <Store size={20} />
+                I'm a Vendor
+              </button>
+              <button
+                onClick={() => navigate('/login/admin')}
+                className={`flex items-center gap-3 text-base px-8 py-4 rounded-xl font-semibold border transition-all hover:-translate-y-0.5 ${isDark ? 'border-white/10 text-white/70 hover:bg-white/5 hover:text-white' : 'border-navy-200 text-navy-600 hover:bg-navy-50'}`}
+              >
+                <Shield size={20} />
+                Admin Login
+              </button>
+            </>
+          )}
         </div>
       </section>
 
@@ -221,7 +248,7 @@ export default function LandingPage() {
                 <div
                   key={c.canteen_id}
                   className={`canteen-card group card-hover rounded-2xl overflow-hidden border ${isDark ? 'glass-card border-white/10' : 'bg-white border-gray-100 shadow-card'}`}
-                  onClick={() => navigate('/login/student')}
+                  onClick={() => navigate(user ? `/${role}` : '/login/student')}
                 >
                   <div className="relative h-36 overflow-hidden">
                     <img src={c.banner_image} alt={c.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -247,8 +274,8 @@ export default function LandingPage() {
             })}
           </div>
           <div className="text-center mt-10">
-            <button onClick={() => navigate('/login/student')} className="btn-gold flex items-center gap-2 mx-auto">
-              Start Ordering <ChevronRight size={16} />
+            <button onClick={() => navigate(user ? `/${role}` : '/login/student')} className="btn-gold flex items-center gap-2 mx-auto">
+              {user ? 'Go to Dashboard' : 'Start Ordering'} <ChevronRight size={16} />
             </button>
           </div>
         </div>

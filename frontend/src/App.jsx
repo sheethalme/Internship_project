@@ -11,42 +11,42 @@ import { ToastProvider } from './contexts/ToastContext';
 import LandingPage from './pages/Landing/LandingPage';
 
 // Auth
-import StudentAuth from './pages/Auth/StudentAuth';
-import VendorAuth from './pages/Auth/VendorAuth';
-import AdminAuth from './pages/Auth/AdminAuth';
+import StudentAuth from './pages/auth/StudentAuth';
+import VendorAuth from './pages/auth/VendorAuth';
+import AdminAuth from './pages/auth/AdminAuth';
 
 // Student
-import StudentLayout from './pages/Student/StudentLayout';
-import StudentDashboard from './pages/Student/Dashboard';
-import BrowseCanteens from './pages/Student/BrowseCanteens';
-import CanteenMenu from './pages/Student/CanteenMenu';
-import MyOrders from './pages/Student/MyOrders';
-import LoyaltyPage from './pages/Student/LoyaltyPage';
-import NotificationsPage from './pages/Student/NotificationsPage';
-import GrievancesPage from './pages/Student/GrievancesPage';
-import RefundsPage from './pages/Student/RefundsPage';
-import BulkOrderForm from './pages/Student/BulkOrderForm';
+import StudentLayout from './pages/student/StudentLayout';
+import StudentDashboard from './pages/student/Dashboard';
+import BrowseCanteens from './pages/student/BrowseCanteens';
+import CanteenMenu from './pages/student/CanteenMenu';
+import MyOrders from './pages/student/MyOrders';
+import LoyaltyPage from './pages/student/LoyaltyPage';
+import NotificationsPage from './pages/student/NotificationsPage';
+import GrievancesPage from './pages/student/GrievancesPage';
+import RefundsPage from './pages/student/RefundsPage';
+import BulkOrderForm from './pages/student/BulkOrderForm';
 
 // Vendor
-import VendorLayout from './pages/Vendor/VendorLayout';
-import VendorDashboard from './pages/Vendor/VendorDashboard';
-import OrderQueue from './pages/Vendor/OrderQueue';
-import MenuManagement from './pages/Vendor/MenuManagement';
-import VendorAnalytics from './pages/Vendor/VendorAnalytics';
-import VendorGrievances from './pages/Vendor/VendorGrievances';
-import VendorRefunds from './pages/Vendor/VendorRefunds';
-import VendorBulkOrders from './pages/Vendor/VendorBulkOrders';
+import VendorLayout from './pages/vendor/VendorLayout';
+import VendorDashboard from './pages/vendor/VendorDashboard';
+import OrderQueue from './pages/vendor/OrderQueue';
+import MenuManagement from './pages/vendor/MenuManagement';
+import VendorAnalytics from './pages/vendor/VendorAnalytics';
+import VendorGrievances from './pages/vendor/VendorGrievances';
+import VendorRefunds from './pages/vendor/VendorRefunds';
+import VendorBulkOrders from './pages/vendor/VendorBulkOrders';
 
 // Admin
-import AdminLayout from './pages/Admin/AdminLayout';
-import AdminDashboard from './pages/Admin/AdminDashboard';
-import AdminOrders from './pages/Admin/AdminOrders';
-import AdminCanteens from './pages/Admin/AdminCanteens';
-import AdminGrievances from './pages/Admin/AdminGrievances';
-import AdminRefunds from './pages/Admin/AdminRefunds';
-import AdminAnalytics from './pages/Admin/AdminAnalytics';
-import AdminReviews from './pages/Admin/AdminReviews';
-import AdminBulkOrders from './pages/Admin/AdminBulkOrders';
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminOrders from './pages/admin/AdminOrders';
+import AdminCanteens from './pages/admin/AdminCanteens';
+import AdminGrievances from './pages/admin/AdminGrievances';
+import AdminRefunds from './pages/admin/AdminRefunds';
+import AdminAnalytics from './pages/admin/AdminAnalytics';
+import AdminReviews from './pages/admin/AdminReviews';
+import AdminBulkOrders from './pages/admin/AdminBulkOrders';
 
 function ProtectedRoute({ children, requiredRole }) {
   const { user, role, loading } = useAuth();

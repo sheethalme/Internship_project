@@ -20,7 +20,14 @@ export default function AdminRefunds() {
 
   const rejectRefund = (r) => {
     updateRefundStatus(r.refund_id, 'rejected');
+    addNotification('refund_rejected', `❌ Your refund request for ${formatCurrency(r.amount)} was rejected.`);
     toast('Refund rejected', 'warning');
+  };
+
+  const approveRefund = (r) => {
+    updateRefundStatus(r.refund_id, 'approved');
+    addNotification('refund_approved', `✅ Your refund request for ${formatCurrency(r.amount)} has been approved!`);
+    toast('Refund approved', 'success');
   };
 
   return (
@@ -57,12 +64,17 @@ export default function AdminRefunds() {
                 </div>
                 <div className="flex gap-2">
                   {canReject && (
-                    <button onClick={() => rejectRefund(r)} className="flex items-center gap-2 flex-1 justify-center py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm transition-colors">
-                      <X size={14} /> Reject
-                    </button>
+                    <>
+                      <button onClick={() => rejectRefund(r)} className="flex items-center gap-2 flex-1 justify-center py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm transition-colors">
+                        <X size={14} /> Reject
+                      </button>
+                      <button onClick={() => approveRefund(r)} className="flex items-center gap-2 flex-1 justify-center py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm transition-colors">
+                        <Check size={14} /> Approve
+                      </button>
+                    </>
                   )}
                   {canProcess && (
-                    <button onClick={() => processRefund(r)} className="flex items-center gap-2 flex-1 justify-center py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-semibold transition-colors">
+                    <button onClick={() => processRefund(r)} className="flex items-center gap-2 flex-1 justify-center py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-sm font-semibold transition-colors">
                       <Check size={14} /> Process → Credit Wallet
                     </button>
                   )}

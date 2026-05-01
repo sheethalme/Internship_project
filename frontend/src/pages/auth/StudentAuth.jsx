@@ -9,7 +9,7 @@ const DEPARTMENTS = ['Computer Science', 'Business Administration', 'Commerce', 
 
 export default function StudentAuth() {
   const navigate = useNavigate();
-  const { loginStudent, registerStudent, user } = useAuth();
+  const { loginStudent, registerStudent, user, role } = useAuth();
   const { toast } = useToast();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [showPass, setShowPass] = useState(false);
@@ -22,8 +22,8 @@ export default function StudentAuth() {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    if (user) navigate('/student', { replace: true });
-  }, [user, navigate]);
+    if (user && role) navigate(`/${role}`, { replace: true });
+  }, [user, role, navigate]);
 
   useEffect(() => {
     if (formRef.current) {
@@ -172,7 +172,7 @@ export default function StudentAuth() {
 
           {mode === 'login' && (
             <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
-              <p className="text-white/50 text-xs text-center">Demo: <span className="text-gold-400 font-mono">aarav.sharma@christuniversity.in</span> / <span className="text-gold-400 font-mono">student123</span></p>
+              <p className="text-white/50 text-xs text-center">Demo: <span className="text-gold-400 font-mono">aarav.sharma@christuniversity.in</span> / <span className="text-gold-400 font-mono">student2024</span></p>
             </div>
           )}
         </div>

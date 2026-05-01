@@ -6,14 +6,14 @@ import { useToast } from '../../contexts/ToastContext';
 
 export default function VendorAuth() {
   const navigate = useNavigate();
-  const { loginVendor, user } = useAuth();
+  const { loginVendor, user, role } = useAuth();
   const { toast } = useToast();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
 
-  useEffect(() => { if (user) navigate('/vendor', { replace: true }); }, [user, navigate]);
+  useEffect(() => { if (user && role) navigate(`/${role}`, { replace: true }); }, [user, role, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

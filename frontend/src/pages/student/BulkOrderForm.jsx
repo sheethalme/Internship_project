@@ -363,7 +363,17 @@ export default function BulkOrderForm() {
                       <div className="flex items-center gap-2">
                         <button onClick={() => setQuantities(p => ({ ...p, [item.item_id]: Math.max(0, (p[item.item_id] || 0) - 1) }))}
                           className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg font-bold">−</button>
-                        <span className={`w-10 text-center font-bold text-sm ${qty > 0 ? 'text-gold-400' : 'text-white/40'}`}>{qty || 0}</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={qty || ''}
+                          placeholder="0"
+                          onChange={e => {
+                            const val = parseInt(e.target.value, 10);
+                            setQuantities(p => ({ ...p, [item.item_id]: isNaN(val) ? 0 : Math.max(0, val) }));
+                          }}
+                          className={`w-14 bg-white/5 border border-white/10 rounded-lg py-1 text-center font-bold text-sm focus:border-gold-500 focus:bg-gold-500/10 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${qty > 0 ? 'text-gold-400 border-gold-500/30' : 'text-white/60'}`}
+                        />
                         <button onClick={() => setQuantities(p => ({ ...p, [item.item_id]: (p[item.item_id] || 0) + 1 }))}
                           className="w-8 h-8 rounded-lg bg-gold-500/20 hover:bg-gold-500/30 text-gold-400 flex items-center justify-center text-lg font-bold">+</button>
                       </div>

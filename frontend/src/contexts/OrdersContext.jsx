@@ -2,9 +2,12 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api';
 import { MOCK_GRIEVANCES, MOCK_REFUNDS } from '../data/mockData';
 
+import { useAuth } from './AuthContext';
+
 const OrdersContext = createContext();
 
 export function OrdersProvider({ children }) {
+  const { user, role } = useAuth();
   const [orders, setOrders] = useState([]);
   const [bulkOrders, setBulkOrders] = useState([]);
   const [grievances, setGrievances] = useState(() => {
@@ -20,29 +23,32 @@ export function OrdersProvider({ children }) {
   useEffect(() => { localStorage.setItem('gg_refunds',    JSON.stringify(refunds));    }, [refunds]);
 
   useEffect(() => {
-    const token = localStorage.getItem('gg_token');
-    const auth  = localStorage.getItem('gg_auth');
-    if (!token || !auth) return;
-    try {
-      const { role } = JSON.parse(auth);
-      if (role === 'student') {
-        const fetchOrders = () => {
-          api.get('/orders/my').then(data => {
-            const fetched = normalizeOrders(data);
-            // Use API status (real vendor updates), only preserve local 'rated' flag
-            setOrders(prev => fetched.map(o => {
-              const local = prev.find(p => p.order_id === o.order_id);
-              return local ? { ...o, rated: local.rated } : o;
-            }));
-          }).catch(() => {});
-        };
-        fetchOrders();
-        const interval = setInterval(fetchOrders, 8000);
-        api.get('/bulk-orders/my').then(data => setBulkOrders(data)).catch(() => {});
-        return () => clearInterval(interval);
-      }
-    } catch {}
-  }, []);
+    if (!user || role !== 'student') {
+      if (!user) setOrders([]); // Clear orders on logout
+      return;
+    }
+
+    const fetchOrders = () => {
+      api.get('/orders/my').then(data => {
+        const fetched = normalizeOrders(data);
+        setOrders(prev => {
+          // If prev is empty, just take fetched
+          if (prev.length === 0) return fetched;
+          // Merge: update status from API, preserve local-only flags like 'rated'
+          return fetched.map(o => {
+            const local = prev.find(p => p.order_id === o.order_id);
+            return local ? { ...o, rated: local.rated } : o;
+          });
+        });
+      }).catch(() => {});
+    };
+
+    fetchOrders();
+    const interval = setInterval(fetchOrders, 5000); // Poll every 5s for better responsiveness
+    api.get('/bulk-orders/my').then(data => setBulkOrders(data)).catch(() => {});
+    
+    return () => clearInterval(interval);
+  }, [user, role]);
 
   const normalizeOrders = (rawOrders) =>
     rawOrders.map(o => ({
