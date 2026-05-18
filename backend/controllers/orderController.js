@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { generateQR } = require('../utils/qrGenerator');
 const { awardPoints, redeemPoints } = require('../utils/loyaltyEngine');
+const { predictPrepTime } = require('../utils/mlPredictor');
 
 const getDeliveryFee = (location) => {
   if (!location) return 0;
@@ -59,6 +60,36 @@ exports.placeOrder = async (req, res) => {
     const deliveryFee = fulfillment_type === 'delivery' ? getDeliveryFee(delivery_location) : 0;
     total += deliveryFee;
 
+    // ── ML PREDICTION LOGIC ───────────────────────────────────
+    const [queueRows] = await conn.query(
+      'SELECT COUNT(*) as qlen FROM orders WHERE canteen_id = ? AND status IN ("placed", "accepted", "preparing")',
+      [canteen_id]
+    );
+    const queueLength = queueRows[0].qlen;
+
+    const [canteenRows] = await conn.query('SELECT chef_count FROM canteens WHERE canteen_id = ?', [canteen_id]);
+    const chefAvailability = canteenRows[0]?.chef_count || 2;
+
+    const hour = new Date().getHours();
+    const isPeakHour = (hour >= 12 && hour <= 14) || (hour >= 17 && hour <= 19) ? 1 : 0;
+
+    let maxPrepTime = 10;
+    for (const item of items) {
+      const [itemRows] = await conn.query('SELECT complexity FROM menu_items WHERE item_id = ?', [item.item_id]);
+      const complexity = itemRows[0]?.complexity || 3;
+
+      const pred = await predictPrepTime({
+        item_id: item.item_id,
+        quantity: item.quantity,
+        queue_length: queueLength,
+        is_peak_hour: isPeakHour,
+        chef_availability: chefAvailability,
+        food_complexity: complexity
+      });
+      if (pred > maxPrepTime) maxPrepTime = pred;
+    }
+    // ──────────────────────────────────────────────────────────
+
     const orderCode = genOrderCode();
     const qrData = await generateQR(orderCode);
 
@@ -66,13 +97,14 @@ exports.placeOrder = async (req, res) => {
       `INSERT INTO orders
          (order_code, student_id, canteen_id, pickup_slot, is_preorder, preorder_date,
           total_amount, loyalty_used, qr_code,
-          fulfillment_type, delivery_location, delivery_fee)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          fulfillment_type, delivery_location, delivery_fee, estimated_prep_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderCode, studentId, canteen_id, pickup_slot,
         is_preorder || 0, preorder_date || null,
         total, loyalty_used || 0, qrData,
         fulfillment_type, delivery_location || null, deliveryFee,
+        maxPrepTime
       ]
     );
     const orderId = orderResult.insertId;
@@ -101,8 +133,8 @@ exports.placeOrder = async (req, res) => {
     }
     // Notify student
     const confirmMsg = fulfillment_type === 'delivery'
-      ? `✅ Order ${orderCode} confirmed! Delivery to ${delivery_location} (~25 mins)`
-      : `✅ Order ${orderCode} confirmed! Pickup: ${pickup_slot}`;
+      ? `✅ Order ${orderCode} confirmed! Delivery to ${delivery_location} (Est. Prep: ${maxPrepTime} mins)`
+      : `✅ Order ${orderCode} confirmed! Est. Prep: ${maxPrepTime} mins. Pickup: ${pickup_slot}`;
     await conn.query(
       'INSERT INTO notifications (user_id, user_role, type, message) VALUES (?, "student", "order_placed", ?)',
       [studentId, confirmMsg]
@@ -117,6 +149,7 @@ exports.placeOrder = async (req, res) => {
       fulfillment_type,
       delivery_location: delivery_location || null,
       qr_code: qrData,
+      estimated_prep_time: maxPrepTime
     });
   } catch (err) {
     await conn.rollback();

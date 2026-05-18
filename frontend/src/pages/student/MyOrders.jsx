@@ -142,6 +142,11 @@ export default function MyOrders() {
                       ? <p className="text-white/40 text-xs">{timeAgo(order.placed_at)} · 🛵 {order.delivery_location}</p>
                       : <p className="text-white/40 text-xs">{timeAgo(order.placed_at)} · Pickup: {order.pickup_slot}</p>
                     }
+                    {!isTerminal && order.estimated_prep_time && (
+                      <p className="text-gold-400/80 text-[10px] font-bold mt-1 animate-pulse">
+                        🔥 Est. Prep: {order.estimated_prep_time} mins
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-gold-400 font-black text-lg">{formatCurrency(order.total_amount)}</p>

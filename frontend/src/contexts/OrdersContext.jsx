@@ -107,6 +107,7 @@ export function OrdersProvider({ children }) {
       fulfillment_type:  orderData.fulfillment_type || 'pickup',
       delivery_location: orderData.delivery_location || null,
       delivery_fee:      result.delivery_fee || 0,
+      estimated_prep_time: result.estimated_prep_time,
     };
 
     setOrders(prev => [newOrder, ...prev]);

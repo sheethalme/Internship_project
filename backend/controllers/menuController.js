@@ -40,11 +40,11 @@ exports.getMenu = async (req, res) => {
 
 exports.addItem = async (req, res) => {
   try {
-    const { name, price, category, is_veg, prep_time_mins, daily_stock_limit, image_url } = req.body;
+    const { name, price, category, is_veg, prep_time_mins, daily_stock_limit, image_url, complexity } = req.body;
     const canteenId = req.user.canteen_id;
     const [result] = await db.query(
-      'INSERT INTO menu_items (canteen_id, name, price, category, is_veg, prep_time_mins, daily_stock_limit, stock_remaining, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [canteenId, name, price, category, is_veg, prep_time_mins, daily_stock_limit, daily_stock_limit, image_url || null]
+      'INSERT INTO menu_items (canteen_id, name, price, category, is_veg, prep_time_mins, daily_stock_limit, stock_remaining, image_url, complexity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [canteenId, name, price, category, is_veg, prep_time_mins, daily_stock_limit, daily_stock_limit, image_url || null, complexity || 3]
     );
     res.status(201).json({ item_id: result.insertId, message: 'Item added' });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -52,10 +52,10 @@ exports.addItem = async (req, res) => {
 
 exports.updateItem = async (req, res) => {
   try {
-    const { price, prep_time_mins, daily_stock_limit, image_url, name, category } = req.body;
+    const { price, prep_time_mins, daily_stock_limit, image_url, name, category, complexity } = req.body;
     await db.query(
-      'UPDATE menu_items SET price=COALESCE(?,price), prep_time_mins=COALESCE(?,prep_time_mins), daily_stock_limit=COALESCE(?,daily_stock_limit), image_url=COALESCE(?,image_url), name=COALESCE(?,name), category=COALESCE(?,category) WHERE item_id = ? AND canteen_id = ?',
-      [price, prep_time_mins, daily_stock_limit, image_url, name, category, req.params.id, req.user.canteen_id]
+      'UPDATE menu_items SET price=COALESCE(?,price), prep_time_mins=COALESCE(?,prep_time_mins), daily_stock_limit=COALESCE(?,daily_stock_limit), image_url=COALESCE(?,image_url), name=COALESCE(?,name), category=COALESCE(?,category), complexity=COALESCE(?,complexity) WHERE item_id = ? AND canteen_id = ?',
+      [price, prep_time_mins, daily_stock_limit, image_url, name, category, complexity, req.params.id, req.user.canteen_id]
     );
     res.json({ message: 'Item updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
