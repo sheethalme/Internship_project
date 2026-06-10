@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mysql -u root -pNeha2004## -e \"SHOW VARIABLES LIKE 'socket';\")",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('password:', JSON.stringify\\(process.env.DB_PASSWORD\\)\\);\")"
+    ]
+  }
+}
