@@ -41,3 +41,90 @@ exports.updateStatus = async (req, res) => {
     res.json({ message: 'Updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
+
+exports.aiReply = async (req, res) => {
+  try {
+    const { from = 'vendor' } = req.body;
+    const [[grievance]] = await db.query(
+      `SELECT g.*, s.name as student_name, c.name as canteen_name
+       FROM grievances g
+       JOIN students s ON g.student_id = s.student_id
+       JOIN canteens c ON g.canteen_id = c.canteen_id
+       WHERE g.grievance_id = ?`,
+      [req.params.id]
+    );
+    if (!grievance) return res.status(404).json({ error: 'Grievance not found' });
+
+    const issueLabels = {
+      wrong_item: 'Wrong Item Delivered',
+      quality_issue: 'Food Quality Issue',
+      long_wait: 'Long Waiting Time',
+      payment_issue: 'Payment Issue',
+      other: 'Other'
+    };
+
+    const role = from === 'admin' ? 'university canteen admin' : 'canteen vendor';
+    const prompt = `You are a helpful ${role} at ${grievance.canteen_name} canteen at Christ University, Bengaluru.
+A student named ${grievance.student_name} has raised a grievance with the following details:
+- Issue Type: ${issueLabels[grievance.issue_type] || grievance.issue_type}
+- Description: ${grievance.description}
+- Ticket Code: ${grievance.ticket_code}
+
+Write a professional, empathetic, and helpful reply to this student addressing their concern. 
+Keep it concise (2-4 sentences), apologize if needed, and explain what action will be taken or has been taken.
+Reply only with the message text, no extra formatting or preamble.`;
+
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const model = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+
+    const ollamaRes = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: false }),
+    });
+
+    if (!ollamaRes.ok) {
+      const errText = await ollamaRes.text();
+      return res.status(502).json({ error: `Ollama error: ${errText}` });
+    }
+
+    const ollamaData = await ollamaRes.json();
+    const aiReply = (ollamaData.response || '').trim();
+    if (!aiReply) return res.status(502).json({ error: 'Empty response from Ollama' });
+
+    res.json({ reply: aiReply });
+  } catch (err) {
+    console.error('AI Reply error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getVendorGrievances = async (req, res) => {
+  try {
+    const [[vendor]] = await db.query('SELECT canteen_id FROM vendors WHERE vendor_id = ?', [req.user.id]);
+    if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+    const [rows] = await db.query(
+      `SELECT g.*, s.name as student_name, c.name as canteen_name
+       FROM grievances g
+       JOIN students s ON g.student_id = s.student_id
+       JOIN canteens c ON g.canteen_id = c.canteen_id
+       WHERE g.canteen_id = ?
+       ORDER BY g.created_at DESC`,
+      [vendor.canteen_id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
+exports.getAllGrievances = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT g.*, s.name as student_name, c.name as canteen_name
+       FROM grievances g
+       JOIN students s ON g.student_id = s.student_id
+       JOIN canteens c ON g.canteen_id = c.canteen_id
+       ORDER BY g.created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};

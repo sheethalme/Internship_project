@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { AlertCircle, MessageSquare, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, AlertTriangle, Sparkles } from 'lucide-react';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCanteens } from '../../contexts/CanteenContext';
 import { timeAgo } from '../../data/mockData';
+import { api } from '../../api';
 
 const STATUS_COLOR = { open: 'badge-red', in_review: 'badge-yellow', resolved: 'badge-green' };
 const ISSUE_LABELS = { wrong_item: 'Wrong Item', quality_issue: 'Quality Issue', long_wait: 'Long Wait', payment_issue: 'Payment Issue', other: 'Other' };
@@ -16,6 +17,7 @@ export default function AdminGrievances() {
   const [replyText, setReplyText] = useState({});
   const [statusFilter, setStatusFilter] = useState('all');
   const [canteenFilter, setCanteenFilter] = useState('all');
+  const [aiLoading, setAiLoading] = useState({});
 
   const isUrgent = (g) => g.status === 'open' && (Date.now() - new Date(g.created_at).getTime()) > 24 * 3600000;
 
@@ -32,12 +34,26 @@ export default function AdminGrievances() {
     setReplyText(p => ({ ...p, [id]: '' }));
   };
 
+  const generateAiReply = async (id) => {
+    setAiLoading(p => ({ ...p, [id]: true }));
+    try {
+      const data = await api.post(`/grievances/${id}/ai-reply`, { from: 'admin' });
+      setReplyText(p => ({ ...p, [id]: data.reply }));
+      toast('AI reply generated!', 'success');
+    } catch (err) {
+      toast('AI reply failed: ' + (err.message || 'Check Ollama is running'), 'error');
+    } finally {
+      setAiLoading(p => ({ ...p, [id]: false }));
+    }
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-black text-white">Grievances Center</h1>
         <p className="text-white/50 text-sm mt-1">
-          {grievances.filter(g => g.status === 'open').length} open · {filtered.filter(isUrgent).length > 0 && <span className="text-red-400">{filtered.filter(isUrgent).length} urgent</span>}
+          {grievances.filter(g => g.status === 'open').length} open
+          {filtered.filter(isUrgent).length > 0 && <> · <span className="text-red-400">{filtered.filter(isUrgent).length} urgent</span></>}
         </p>
       </div>
 
@@ -95,10 +111,24 @@ export default function AdminGrievances() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <textarea placeholder="Admin reply..." value={replyText[g.grievance_id] || ''} onChange={e => setReplyText(p => ({ ...p, [g.grievance_id]: e.target.value }))} rows={2} className="input-dark resize-none text-sm" />
-                    <div className="flex gap-2">
+                    <textarea
+                      placeholder="Admin reply..."
+                      value={replyText[g.grievance_id] || ''}
+                      onChange={e => setReplyText(p => ({ ...p, [g.grievance_id]: e.target.value }))}
+                      rows={3}
+                      className="input-dark resize-none text-sm"
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={() => generateAiReply(g.grievance_id)}
+                        disabled={aiLoading[g.grievance_id]}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 text-sm transition-colors disabled:opacity-50"
+                      >
+                        <Sparkles size={12} />
+                        {aiLoading[g.grievance_id] ? 'Generating...' : 'AI Reply'}
+                      </button>
                       <button onClick={() => submitReply(g.grievance_id)} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm transition-colors">
-                        <MessageSquare size={12} /> Reply
+                        <MessageSquare size={12} /> Send Reply
                       </button>
                       <button onClick={() => { resolveGrievance(g.grievance_id); toast('Ticket resolved', 'success'); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm transition-colors">
                         Close Ticket

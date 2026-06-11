@@ -1,3 +1,5 @@
+// At the top of server.js — just a helpful startup log
+console.log('💡 Make sure Ollama is running: open a terminal and type: ollama serve');
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -46,10 +48,21 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+const db = require('./config/db');
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 GourmetGo API running on http://localhost:${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+db.query('SELECT 1')
+  .then(() => {
+    console.log('✅ MySQL Database connected successfully.');
+    app.listen(PORT, () => {
+      console.log(`🚀 GourmetGo API running on http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
+  })
+  .catch((err) => {
+    console.error('❌ Database connection failed! Please check your MySQL service and credentials.');
+    console.error('Error Details:', err.message);
+    process.exit(1);
+  });
 
 module.exports = app;

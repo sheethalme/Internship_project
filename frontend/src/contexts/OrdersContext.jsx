@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../api';
-import { MOCK_GRIEVANCES, MOCK_REFUNDS } from '../data/mockData';
+import { MOCK_REFUNDS } from '../data/mockData';
 
 import { useAuth } from './AuthContext';
 
@@ -10,17 +10,13 @@ export function OrdersProvider({ children }) {
   const { user, role } = useAuth();
   const [orders, setOrders] = useState([]);
   const [bulkOrders, setBulkOrders] = useState([]);
-  const [grievances, setGrievances] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gg_grievances') || JSON.stringify(MOCK_GRIEVANCES)); }
-    catch { return MOCK_GRIEVANCES; }
-  });
+  const [grievances, setGrievances] = useState([]);
   const [refunds, setRefunds] = useState(() => {
     try { return JSON.parse(localStorage.getItem('gg_refunds') || JSON.stringify(MOCK_REFUNDS)); }
     catch { return MOCK_REFUNDS; }
   });
 
-  useEffect(() => { localStorage.setItem('gg_grievances', JSON.stringify(grievances)); }, [grievances]);
-  useEffect(() => { localStorage.setItem('gg_refunds',    JSON.stringify(refunds));    }, [refunds]);
+  useEffect(() => { localStorage.setItem('gg_refunds', JSON.stringify(refunds)); }, [refunds]);
 
   useEffect(() => {
     if (!user || role !== 'student') {
@@ -47,6 +43,22 @@ export function OrdersProvider({ children }) {
     const interval = setInterval(fetchOrders, 5000); // Poll every 5s for better responsiveness
     api.get('/bulk-orders/my').then(data => setBulkOrders(data)).catch(() => {});
     
+    return () => clearInterval(interval);
+  }, [user, role]);
+
+  // Fetch grievances from API based on role
+  useEffect(() => {
+    if (!user) { setGrievances([]); return; }
+    const fetchGrievances = () => {
+      let endpoint = null;
+      if (role === 'student') endpoint = '/grievances/my';
+      else if (role === 'vendor') endpoint = '/grievances/vendor';
+      else if (role === 'admin') endpoint = '/grievances/all';
+      if (!endpoint) return;
+      api.get(endpoint).then(data => setGrievances(data)).catch(() => {});
+    };
+    fetchGrievances();
+    const interval = setInterval(fetchGrievances, 10000);
     return () => clearInterval(interval);
   }, [user, role]);
 
@@ -144,21 +156,14 @@ export function OrdersProvider({ children }) {
   };
 
   // ── GRIEVANCES ───────────────────────────────────────────────
-  const addGrievance = (data) => {
-    const newG = {
-      grievance_id: Date.now(),
-      ticket_code:  `GRV-${String(Math.floor(1000 + Math.random() * 9000))}`,
-      ...data,
-      status:       'open',
-      vendor_reply: null,
-      admin_reply:  null,
-      created_at:   new Date().toISOString(),
-    };
-    setGrievances(prev => [newG, ...prev]);
-    return newG;
+  const addGrievance = async (data) => {
+    const result = await api.post('/grievances', data);
+    api.get('/grievances/my').then(rows => setGrievances(rows)).catch(() => {});
+    return result;
   };
 
-  const replyGrievance = (id, reply, from = 'vendor') => {
+  const replyGrievance = async (id, reply, from = 'vendor') => {
+    await api.put(`/grievances/${id}/status`, { reply, from, status: 'in_review' });
     setGrievances(prev => prev.map(g =>
       g.grievance_id === id
         ? { ...g, [`${from}_reply`]: reply, status: 'in_review' }
@@ -166,7 +171,8 @@ export function OrdersProvider({ children }) {
     ));
   };
 
-  const resolveGrievance = (id) => {
+  const resolveGrievance = async (id) => {
+    await api.put(`/grievances/${id}/status`, { status: 'resolved' });
     setGrievances(prev => prev.map(g => g.grievance_id === id ? { ...g, status: 'resolved' } : g));
   };
 

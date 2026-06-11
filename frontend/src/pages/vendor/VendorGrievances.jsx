@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { AlertCircle, MessageSquare, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { AlertCircle, MessageSquare, ChevronDown, ChevronUp, Check, Sparkles } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useToast } from '../../contexts/ToastContext';
 import { timeAgo } from '../../data/mockData';
+import { api } from '../../api';
 
 const ISSUE_LABELS = { wrong_item: 'Wrong Item', quality_issue: 'Quality Issue', long_wait: 'Long Wait', payment_issue: 'Payment Issue', other: 'Other' };
 const STATUS_COLOR = { open: 'badge-red', in_review: 'badge-yellow', resolved: 'badge-green' };
@@ -14,6 +15,7 @@ export default function VendorGrievances() {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(null);
   const [replyText, setReplyText] = useState({});
+  const [aiLoading, setAiLoading] = useState({});
 
   const myGrievances = grievances.filter(g => g.canteen_id === user?.canteen_id);
 
@@ -22,6 +24,19 @@ export default function VendorGrievances() {
     replyGrievance(id, replyText[id], 'vendor');
     toast('Reply sent to student', 'success');
     setReplyText(p => ({ ...p, [id]: '' }));
+  };
+
+  const generateAiReply = async (id) => {
+    setAiLoading(p => ({ ...p, [id]: true }));
+    try {
+      const data = await api.post(`/grievances/${id}/ai-reply`, { from: 'vendor' });
+      setReplyText(p => ({ ...p, [id]: data.reply }));
+      toast('AI reply generated!', 'success');
+    } catch (err) {
+      toast('AI reply failed: ' + (err.message || 'Check Ollama is running'), 'error');
+    } finally {
+      setAiLoading(p => ({ ...p, [id]: false }));
+    }
   };
 
   return (
@@ -77,7 +92,15 @@ export default function VendorGrievances() {
                         rows={3}
                         className="input-dark resize-none text-sm"
                       />
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
+                        <button
+                          onClick={() => generateAiReply(g.grievance_id)}
+                          disabled={aiLoading[g.grievance_id]}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 text-sm font-semibold transition-colors disabled:opacity-50"
+                        >
+                          <Sparkles size={14} />
+                          {aiLoading[g.grievance_id] ? 'Generating...' : 'AI Reply'}
+                        </button>
                         <button onClick={() => submitReply(g.grievance_id)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-sm font-semibold transition-colors">
                           <MessageSquare size={14} /> Send Reply
                         </button>
