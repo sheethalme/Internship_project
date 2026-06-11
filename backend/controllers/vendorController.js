@@ -183,6 +183,119 @@ exports.getAnalytics = async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
+// ── Review Sentiment (DistilBERT) ────────────────────────────
+const STOPWORDS = new Set([
+  'the','a','an','and','or','but','is','are','was','were','be','been','being','to','of','in','on',
+  'at','for','with','it','its','this','that','these','those','i','we','you','they','he','she','my',
+  'our','your','their','as','so','if','then','than','too','very','just','not','no','do','did','does',
+  'had','has','have','will','would','can','could','should','about','from','by','out','up','down','here',
+  'there','what','when','which','who','how','all','any','some','more','most','also','really','quite',
+  'food','order','ordered','place','places','time','got','get','give','given','went','came','one','two',
+  'us','me','even','much','like','well','want','need','only','still','back','per','am','pm','rs','am',
+  'after','before','again','now','day','today','first','last','also','dont','didnt','im','ive','were','off'
+]);
+
+// Count recurring uni/bi-grams across a set of comments → Map<term, count>.
+const countTerms = (comments) => {
+  const counts = new Map();
+  for (const raw of comments) {
+    const tokens = String(raw || '')
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+    for (const t of tokens) counts.set(t, (counts.get(t) || 0) + 1);
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const bg = `${tokens[i]} ${tokens[i + 1]}`;
+      counts.set(bg, (counts.get(bg) || 0) + 1);
+    }
+  }
+  return counts;
+};
+
+// Keep only terms that are DISTINCTIVE to this mood: recurring (>=2) AND used
+// more here than in the opposite mood — so generic words like "good"/"taste"
+// don't show up in both columns.
+const distinctiveKeywords = (mine, other, topN = 8) =>
+  [...mine.entries()]
+    .filter(([term, c]) => c >= 2 && c > (other.get(term) || 0))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([term, count]) => ({ term, count }));
+
+exports.getSentiment = async (req, res) => {
+  try {
+    const canteenId = req.user.canteen_id;
+
+    // Weekly mood summary (last 7 days)
+    const [summaryRows] = await db.query(
+      `SELECT sentiment, COUNT(*) as count FROM reviews
+       WHERE canteen_id = ? AND sentiment IS NOT NULL
+       AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       GROUP BY sentiment`,
+      [canteenId]
+    );
+    const weekly_summary = { positive: 0, neutral: 0, negative: 0, total: 0 };
+    for (const r of summaryRows) {
+      weekly_summary[r.sentiment] = r.count;
+      weekly_summary.total += r.count;
+    }
+
+    // Daily trend (last 7 calendar days, zero-filled)
+    const [trendRows] = await db.query(
+      `SELECT DATE(created_at) as date, sentiment, COUNT(*) as count FROM reviews
+       WHERE canteen_id = ? AND sentiment IS NOT NULL
+       AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       GROUP BY DATE(created_at), sentiment`,
+      [canteenId]
+    );
+    const byDate = {};
+    for (const r of trendRows) {
+      const key = new Date(r.date).toISOString().split('T')[0];
+      byDate[key] = byDate[key] || { positive: 0, neutral: 0, negative: 0 };
+      byDate[key][r.sentiment] = r.count;
+    }
+    const trend = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      const day = d.toLocaleDateString('en-IN', { weekday: 'short' });
+      trend.push({ day, date: key, ...(byDate[key] || { positive: 0, neutral: 0, negative: 0 }) });
+    }
+
+    // Recurring keywords (last 30 days), split by polarity
+    const [posComments] = await db.query(
+      `SELECT comment FROM reviews WHERE canteen_id = ? AND sentiment = 'positive'
+       AND comment IS NOT NULL AND comment <> '' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`,
+      [canteenId]
+    );
+    const [negComments] = await db.query(
+      `SELECT comment FROM reviews WHERE canteen_id = ? AND sentiment = 'negative'
+       AND comment IS NOT NULL AND comment <> '' AND created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`,
+      [canteenId]
+    );
+    const posMap = countTerms(posComments.map((r) => r.comment));
+    const negMap = countTerms(negComments.map((r) => r.comment));
+    const keywords = {
+      positive: distinctiveKeywords(posMap, negMap),
+      negative: distinctiveKeywords(negMap, posMap),
+    };
+
+    // Recent reviews (most recent analyzed comments) for the vendor to read.
+    const [recent] = await db.query(
+      `SELECT r.review_id, r.rating, r.comment, r.sentiment, r.sentiment_score, r.created_at,
+              s.name AS student_name
+       FROM reviews r JOIN students s ON r.student_id = s.student_id
+       WHERE r.canteen_id = ? AND r.sentiment IS NOT NULL AND r.comment IS NOT NULL AND r.comment <> ''
+       ORDER BY r.created_at DESC LIMIT 8`,
+      [canteenId]
+    );
+
+    res.json({ weekly_summary, trend, keywords, recent });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+};
+
 exports.getPreorders = async (req, res) => {
   try {
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);

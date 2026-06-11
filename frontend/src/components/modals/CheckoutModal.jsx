@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { gsap } from 'gsap';
 import { X, Zap, CreditCard, Smartphone, Wallet, Check, Truck, PersonStanding } from 'lucide-react';
 import { useCart } from '../../contexts/CartContext';
@@ -122,7 +123,7 @@ export default function CheckoutModal({ canteen, onClose }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={step === 'success' ? onClose : undefined} />
       <div className="relative glass-card w-full max-w-md max-h-[90vh] overflow-y-auto animate-scale-in">
@@ -399,6 +400,7 @@ export default function CheckoutModal({ canteen, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

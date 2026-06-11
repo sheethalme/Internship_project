@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+*.env
+!*.env.example
+
+# OS
+.DS_Store
+
+# Editor / local tooling
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# Large / generated ML artifacts
+backend/ml/sentiment_model/
+backend/ml/data/seed_reviews.json
+
+# Runtime uploads
+backend/uploads/

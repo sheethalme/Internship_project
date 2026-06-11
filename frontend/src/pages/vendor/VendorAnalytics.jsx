@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Truck } from 'lucide-react';
+import { Truck, Smile, Tag, MessageSquare } from 'lucide-react';
 import { api } from '../../api';
 import { formatCurrency, DAYS, HOURS } from '../../data/mockData';
+
+// Sentiment → badge styling
+const SENT = {
+  positive: { label: 'Positive', cls: 'bg-green-500/15 text-green-300 border-green-500/30' },
+  neutral:  { label: 'Neutral',  cls: 'bg-gray-400/15 text-gray-300 border-gray-400/30' },
+  negative: { label: 'Negative', cls: 'bg-red-500/15 text-red-300 border-red-500/30' },
+};
 
 // MySQL DAYOFWEEK (1=Sun..7=Sat) → Mon-first index
 const mysqlDayToIdx = (d) => (d - 2 + 7) % 7;
@@ -19,10 +26,25 @@ function buildHeatmapGrid(rawRows) {
 
 export default function VendorAnalytics() {
   const [data, setData] = useState(null);
+  const [sentiment, setSentiment] = useState(null);
 
   useEffect(() => {
     api.get('/vendor/analytics').then(setData).catch(() => {});
+    api.get('/vendor/sentiment').then(setSentiment).catch(() => {});
   }, []);
+
+  // ── Review sentiment ──────────────────────────────────────
+  const ws = sentiment?.weekly_summary || { positive: 0, neutral: 0, negative: 0, total: 0 };
+  const moodDonut = [
+    { name: 'Positive', value: ws.positive, color: '#22c55e' },
+    { name: 'Neutral',  value: ws.neutral,  color: '#9ca3af' },
+    { name: 'Negative', value: ws.negative, color: '#ef4444' },
+  ];
+  const sentimentTrend = sentiment?.trend || [];
+  const posKeywords = sentiment?.keywords?.positive || [];
+  const negKeywords = sentiment?.keywords?.negative || [];
+  const recentReviews = sentiment?.recent || [];
+  const hasMood = ws.total > 0;
 
   // Revenue chart — last 7 days from real data
   const revenueData = (data?.revenue || []).slice(-7).map(r => ({
@@ -103,6 +125,128 @@ export default function VendorAnalytics() {
               <Bar dataKey="revenue" fill="#f59e0b" radius={[6, 6, 0, 0]} name="revenue" />
             </BarChart>
           </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── Review Sentiment (DistilBERT) ─────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Weekly mood summary donut */}
+        <div className="glass-card p-5">
+          <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+            <Smile size={16} className="text-gold-400" /> Weekly Mood Summary
+          </h3>
+          {!hasMood ? (
+            <p className="text-white/30 text-sm text-center py-8">No analyzed reviews this week yet</p>
+          ) : (
+            <div className="flex items-center gap-6">
+              <PieChart width={120} height={120}>
+                <Pie data={moodDonut} cx={55} cy={55} innerRadius={35} outerRadius={55} dataKey="value">
+                  {moodDonut.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+              </PieChart>
+              <div className="space-y-2 flex-1">
+                {moodDonut.map(d => {
+                  const pct = Math.round((d.value / (ws.total || 1)) * 100);
+                  return (
+                    <div key={d.name} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: d.color }} />
+                      <span className="text-white/70">{d.name}</span>
+                      <span className="text-white font-bold ml-auto">{d.value} ({pct}%)</span>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-white/40 pt-1">{ws.total} reviews analyzed</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Recurring keywords */}
+        <div className="glass-card p-5">
+          <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+            <Tag size={16} className="text-gold-400" /> Recurring Keywords
+          </h3>
+          {posKeywords.length === 0 && negKeywords.length === 0 ? (
+            <p className="text-white/30 text-sm text-center py-8">Not enough reviews to extract themes yet</p>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-green-400/80 text-xs font-semibold uppercase tracking-wider mb-2">Praised</p>
+                <div className="flex flex-wrap gap-2">
+                  {posKeywords.length === 0 ? <span className="text-white/30 text-xs">—</span> :
+                    posKeywords.map(k => (
+                      <span key={k.term} className="inline-flex items-center gap-1 bg-green-500/15 text-green-300 border border-green-500/25 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {k.term} <span className="text-green-400/60">{k.count}</span>
+                      </span>
+                    ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-red-400/80 text-xs font-semibold uppercase tracking-wider mb-2">Complaints</p>
+                <div className="flex flex-wrap gap-2">
+                  {negKeywords.length === 0 ? <span className="text-white/30 text-xs">—</span> :
+                    negKeywords.map(k => (
+                      <span key={k.term} className="inline-flex items-center gap-1 bg-red-500/15 text-red-300 border border-red-500/25 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {k.term} <span className="text-red-400/60">{k.count}</span>
+                      </span>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sentiment trend (last 7 days) */}
+      <div className="glass-card p-5">
+        <h3 className="text-white font-bold mb-4">Review Sentiment Trend — Last 7 Days</h3>
+        {!hasMood ? (
+          <p className="text-white/30 text-sm text-center py-8">No analyzed reviews yet</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={sentimentTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="day" tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
+              <YAxis allowDecimals={false} tick={{ fill: 'rgba(255,255,255,0.4)', fontSize: 12 }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="positive" stackId="s" fill="#22c55e" name="Positive" />
+              <Bar dataKey="neutral"  stackId="s" fill="#9ca3af" name="Neutral" />
+              <Bar dataKey="negative" stackId="s" fill="#ef4444" name="Negative" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Recent reviews with sentiment badges */}
+      <div className="glass-card p-5">
+        <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+          <MessageSquare size={16} className="text-gold-400" /> Recent Reviews
+        </h3>
+        {recentReviews.length === 0 ? (
+          <p className="text-white/30 text-sm text-center py-8">No reviews yet</p>
+        ) : (
+          <div className="space-y-3">
+            {recentReviews.map(r => {
+              const s = SENT[r.sentiment] || SENT.neutral;
+              return (
+                <div key={r.review_id} className="flex items-start gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 mt-0.5 ${s.cls}`}>
+                    {s.label} {Math.round((r.sentiment_score || 0) * 100)}%
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-white text-sm font-semibold truncate">{r.student_name}</span>
+                      <span className="text-gold-400 text-xs flex-shrink-0">{'★'.repeat(r.rating || 0)}<span className="text-white/15">{'★'.repeat(5 - (r.rating || 0))}</span></span>
+                      <span className="text-white/30 text-xs ml-auto flex-shrink-0">
+                        {new Date(r.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </div>
+                    <p className="text-white/70 text-sm break-words">{r.comment}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 

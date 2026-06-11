@@ -1,0 +1,8 @@
+# GourmetGo ML dependencies (review sentiment + prep-time models)
+# Install: python3 -m pip install -r requirements.txt
+transformers>=4.40
+torch>=2.2
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.24
+xgboost>=2.0

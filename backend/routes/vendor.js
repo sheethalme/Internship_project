@@ -15,6 +15,7 @@ router.put('/orders/:id/delivered', c.markDelivered);
 router.put('/orders/:id/complete', c.completeOrder);
 router.put('/canteen/status', c.updateCanteenStatus);
 router.get('/analytics', c.getAnalytics);
+router.get('/sentiment', c.getSentiment);
 
 // Bulk orders
 router.get('/bulk-orders', b.vendorListBulkOrders);

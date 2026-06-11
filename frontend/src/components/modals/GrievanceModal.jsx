@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -39,7 +40,7 @@ export default function GrievanceModal({ order, onClose }) {
     toast('Grievance submitted successfully', 'success');
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative glass-card w-full max-w-sm p-6 animate-scale-in">
@@ -81,6 +82,7 @@ export default function GrievanceModal({ order, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Star } from 'lucide-react';
+import { api } from '../../api';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -9,18 +11,31 @@ export default function RatingModal({ order, onClose }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (rating === 0) { toast('Please select a rating', 'warning'); return; }
-    markRated(order.order_id);
-    setSubmitted(true);
-    setTimeout(() => {
-      toast('Review submitted! Thanks 🌟', 'success');
-      onClose();
-    }, 1000);
+    setSubmitting(true);
+    try {
+      await api.post('/reviews', {
+        order_id:   order.order_id,
+        canteen_id: order.canteen_id,
+        rating,
+        comment,
+      });
+      markRated(order.order_id);
+      setSubmitted(true);
+      setTimeout(() => {
+        toast('Review submitted! Thanks 🌟', 'success');
+        onClose();
+      }, 1000);
+    } catch (err) {
+      toast(err.message || 'Could not submit review', 'error');
+      setSubmitting(false);
+    }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
       <div className="relative glass-card w-full max-w-sm p-6 animate-scale-in">
@@ -51,10 +66,13 @@ export default function RatingModal({ order, onClose }) {
               rows={3}
               className="input-dark resize-none mb-4"
             />
-            <button onClick={handleSubmit} className="btn-gold w-full">Submit Review</button>
+            <button onClick={handleSubmit} disabled={submitting} className="btn-gold w-full disabled:opacity-50">
+              {submitting ? 'Submitting…' : 'Submit Review'}
+            </button>
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

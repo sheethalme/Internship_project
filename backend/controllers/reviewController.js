@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { predictSentiment } = require('../utils/sentimentPredictor');
 
 exports.submit = async (req, res) => {
   try {
@@ -11,6 +12,16 @@ exports.submit = async (req, res) => {
     );
     // Update canteen avg rating
     await db.query('UPDATE canteens SET avg_rating = (SELECT AVG(rating) FROM reviews WHERE canteen_id = ?) WHERE canteen_id = ?', [canteen_id, canteen_id]);
+
+    // Score sentiment in the background — don't block the student's response.
+    if (comment && comment.trim()) {
+      predictSentiment(comment)
+        .then(({ label, score }) =>
+          db.query('UPDATE reviews SET sentiment = ?, sentiment_score = ? WHERE review_id = ?',
+            [label, score, result.insertId]))
+        .catch((err) => console.error('Sentiment scoring failed:', err.message));
+    }
+
     res.status(201).json({ review_id: result.insertId, message: 'Review submitted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
