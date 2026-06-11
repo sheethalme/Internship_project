@@ -2,6 +2,7 @@ const db = require('../config/db');
 const { generateQR } = require('../utils/qrGenerator');
 const { awardPoints, redeemPoints } = require('../utils/loyaltyEngine');
 const { predictPrepTime } = require('../utils/mlPredictor');
+const slotSocket = require('../socket');
 
 const getDeliveryFee = (location) => {
   if (!location) return 0;
@@ -74,9 +75,11 @@ exports.placeOrder = async (req, res) => {
     const isPeakHour = (hour >= 12 && hour <= 14) || (hour >= 17 && hour <= 19) ? 1 : 0;
 
     let maxPrepTime = 10;
+    const itemPredictions = [];
     for (const item of items) {
-      const [itemRows] = await conn.query('SELECT complexity FROM menu_items WHERE item_id = ?', [item.item_id]);
+      const [itemRows] = await conn.query('SELECT complexity, prep_time_mins FROM menu_items WHERE item_id = ?', [item.item_id]);
       const complexity = itemRows[0]?.complexity || 3;
+      const prepTimeMins = itemRows[0]?.prep_time_mins || 5;
 
       const pred = await predictPrepTime({
         item_id: item.item_id,
@@ -84,9 +87,21 @@ exports.placeOrder = async (req, res) => {
         queue_length: queueLength,
         is_peak_hour: isPeakHour,
         chef_availability: chefAvailability,
-        food_complexity: complexity
+        food_complexity: complexity,
+        prep_time_mins: prepTimeMins
       });
       if (pred > maxPrepTime) maxPrepTime = pred;
+      // store per-item factors and prediction to insert after order is created
+      itemPredictions.push({
+        item_id: item.item_id,
+        quantity: item.quantity,
+        queue_length: queueLength,
+        is_peak_hour: isPeakHour,
+        chef_availability: chefAvailability,
+        food_complexity: complexity,
+        prep_time_mins: prepTimeMins,
+        prediction: pred
+      });
     }
     // ──────────────────────────────────────────────────────────
 
@@ -109,6 +124,20 @@ exports.placeOrder = async (req, res) => {
     );
     const orderId = orderResult.insertId;
 
+    // Persist per-item prediction logs for analysis
+    try {
+      for (const p of itemPredictions) {
+        await conn.query(
+          `INSERT INTO order_item_predictions
+               (order_id, item_id, quantity, queue_length, is_peak_hour, chef_availability, food_complexity, prep_time_mins, prediction)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [orderId, p.item_id, p.quantity, p.queue_length, p.is_peak_hour, p.chef_availability, p.food_complexity, p.prep_time_mins, p.prediction]
+        );
+      }
+    } catch (e) {
+      // don't fail the whole order if logging fails; just warn
+      console.warn('Failed to insert order_item_predictions:', e.message);
+    }
     // Insert order items & decrement stock
     for (const item of items) {
       const [priceRow] = await conn.query('SELECT price FROM menu_items WHERE item_id = ?', [item.item_id]);
@@ -141,6 +170,13 @@ exports.placeOrder = async (req, res) => {
     );
 
     await conn.commit();
+
+    // emit slot update for this canteen/date so connected clients refresh counts
+    try {
+      const slotDate = is_preorder ? new Date(preorder_date) : new Date();
+      slotSocket.emitSlotUpdate(canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update:', e.message); }
+
     res.status(201).json({
       order_id: orderId,
       order_code: orderCode,
@@ -228,6 +264,13 @@ exports.cancelOrder = async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Order not found' });
     if (rows[0].status !== 'placed') return res.status(400).json({ error: 'Cannot cancel order at this stage' });
     await db.query('UPDATE orders SET status = "cancelled" WHERE order_id = ?', [req.params.id]);
+
+    // emit slot update so connected clients refresh counts
+    try {
+      const placedAt = rows[0].placed_at || new Date();
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, new Date(placedAt));
+    } catch (e) { console.warn('Failed to emit slot update on cancel:', e.message); }
+
     res.json({ message: 'Order cancelled' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };

@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
 const app = express();
 
@@ -30,11 +31,12 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/bulk-orders', require('./routes/bulkOrders'));
 app.use('/api/notifications', require('./routes/notifications'));
 
-// Slot recommendation endpoint
+// Slot recommendation endpoint (accepts optional ?date=YYYY-MM-DD)
 const { getSlots } = require('./utils/slotUtils');
 app.get('/api/canteens/:id/slots', async (req, res) => {
   try {
-    const slots = await getSlots(req.params.id);
+    const date = req.query.date ? new Date(req.query.date) : new Date();
+    const slots = await getSlots(req.params.id, date);
     res.json(slots);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -51,10 +53,16 @@ app.use((err, req, res, next) => {
 const db = require('./config/db');
 
 const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+
+// Initialize WebSocket after server created
+const slotSocket = require('./socket');
+slotSocket.init(server, { origins: ['http://localhost:5173', 'http://localhost:5174'] });
+
 db.query('SELECT 1')
   .then(() => {
     console.log('✅ MySQL Database connected successfully.');
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 GourmetGo API running on http://localhost:${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
@@ -65,4 +73,4 @@ db.query('SELECT 1')
     process.exit(1);
   });
 
-module.exports = app;
+module.exports = server;

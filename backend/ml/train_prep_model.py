@@ -20,20 +20,21 @@ def generate_synthetic_data(n_samples=2000):
         is_peak_hour = 1 if (12 <= hour <= 14) or (17 <= hour <= 19) else 0
         chef_availability = np.random.randint(1, 6)
         food_complexity = np.random.randint(1, 6)
-        
-        # Base preparation time logic
-        # 5 mins base + complexity * 3 + quantity * 2 + queue * 0.5 - chefs * 1 + peak * 5
-        base_time = 5
-        prep_time = (base_time + 
-                     (food_complexity * 3) + 
-                     (quantity * 1.5) + 
+        # Simulate expert baseline: prep_time_mins (menu static value)
+        base_time = 4
+        prep_time_mins = max(3, base_time + (food_complexity * 2) + np.random.normal(0, 1))
+
+        # Total observed prep time = baseline + dynamic adjustments
+        # adjustments: quantity, queue_length, chef availability, peak hour, noise
+        prep_time = (prep_time_mins + 
+                     (quantity * 1.2) + 
                      (queue_length * 0.8) - 
-                     (chef_availability * 1.2) + 
-                     (is_peak_hour * 6) + 
-                     np.random.normal(0, 2)) # noise
-        
-        prep_time = max(5, prep_time)
-        
+                     (chef_availability * 1.1) + 
+                     (is_peak_hour * 5) + 
+                     np.random.normal(0, 2))
+
+        prep_time = max(prep_time_mins, prep_time)
+
         data.append({
             'item_id': item_id,
             'quantity': quantity,
@@ -41,6 +42,7 @@ def generate_synthetic_data(n_samples=2000):
             'is_peak_hour': is_peak_hour,
             'chef_availability': chef_availability,
             'food_complexity': food_complexity,
+            'prep_time_mins': prep_time_mins,
             'prep_time': prep_time
         })
     

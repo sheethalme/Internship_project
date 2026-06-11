@@ -9,6 +9,8 @@ import { useCanteens } from '../../contexts/CanteenContext';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import { useToast } from '../../contexts/ToastContext';
 import { formatCurrency, generateTimeSlots } from '../../data/mockData';
+import axios from 'axios';
+import { io } from 'socket.io-client';
 import QRCodeDisplay from '../ui/QRCodeDisplay';
 import Confetti from '../ui/Confetti';
 
@@ -47,8 +49,36 @@ export default function CheckoutModal({ canteen, onClose }) {
   const deliveryPanelRef = useRef(null);
   const pickupPanelRef = useRef(null);
   const feeChipRef = useRef(null);
+  // seed slots with the original generator to keep UI identical while live data loads
+  const [slots, setSlots] = useState(() => generateTimeSlots(canteen.canteen_id));
+  // fetch slots when modal mounts / canteen changes and subscribe to realtime updates
+  useEffect(() => {
+    let mounted = true;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+    const socketBase = apiBase.replace(/\/api\/?$/, '');
+    const fetchSlots = async () => {
+      try {
+        const res = await axios.get(`${apiBase}/canteens/${canteen.canteen_id}/slots?date=${dateStr}`);
+        if (mounted) setSlots(res.data || []);
+      } catch (e) {
+        console.error('Failed to fetch slots', e.message);
+      }
+    };
+    fetchSlots();
 
-  const slots = generateTimeSlots(canteen.canteen_id);
+    const socket = io(socketBase);
+    socket.on('connect', () => console.log('Slot socket connected', socket.id));
+    socket.on('slots_update', (msg) => {
+      try {
+        if (msg?.canteenId === Number(canteen.canteen_id) && msg?.date === dateStr) {
+          if (mounted) setSlots(msg.slots || []);
+        }
+      } catch (e) { /* ignore */ }
+    });
+
+    return () => { mounted = false; socket.disconnect(); };
+  }, [canteen.canteen_id]);
   const subtotal = getTotal(canteen.canteen_id);
   const coinsDiscount = useCoins ? Math.floor((user?.loyalty_points || 0) / 100) * 10 : 0;
   const selectedLocation = DELIVERY_LOCATIONS.find(l => l.label === selectedFloor);

@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const slotSocket = require('../socket');
 
 const DELIVERY_AGENTS = ['Rajesh K.', 'Suresh M.', 'Vinod P.', 'Deepak R.', 'Arjun S.'];
 const pickAgent = () => DELIVERY_AGENTS[Math.floor(Math.random() * DELIVERY_AGENTS.length)];
@@ -48,6 +49,63 @@ exports.getLiveOrders = async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 
+exports.cancelAllOrders = async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [orders] = await conn.query(
+      `SELECT order_id, student_id, canteen_id, placed_at, is_preorder, preorder_date, order_code
+       FROM orders
+       WHERE canteen_id = ? AND status NOT IN ('picked_up','delivered','cancelled')`,
+      [req.user.canteen_id]
+    );
+    if (!orders.length) {
+      await conn.commit();
+      return res.json({ message: 'No active orders to cancel', cancelled: 0 });
+    }
+
+    const orderIds = orders.map(o => o.order_id);
+    const placeholders = orderIds.map(() => '?').join(',');
+    await conn.query(
+      `UPDATE orders SET status = 'cancelled' WHERE order_id IN (${placeholders})`,
+      orderIds
+    );
+
+    const notifications = orders.map(o => [
+      o.student_id,
+      'student',
+      'order_cancelled',
+      `❌ Your order ${o.order_code} has been cancelled by the vendor. We apologize for the inconvenience.`
+    ]);
+    if (notifications.length) {
+      await conn.query(
+        'INSERT INTO notifications (user_id, user_role, type, message) VALUES ?',
+        [notifications]
+      );
+    }
+
+    const dates = [...new Set(orders.map(o => {
+      const date = o.is_preorder ? o.preorder_date : o.placed_at;
+      return date ? new Date(date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    }))];
+    for (const dateStr of dates) {
+      try {
+        slotSocket.emitSlotUpdate(req.user.canteen_id, new Date(dateStr));
+      } catch (e) {
+        console.warn('Failed to emit slot update on cancel all:', e.message);
+      }
+    }
+
+    await conn.commit();
+    res.json({ message: 'Cancelled all active orders', cancelled: orderIds.length });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
+  }
+};
+
 exports.acceptOrder = async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM orders WHERE order_id = ? AND canteen_id = ?', [req.params.id, req.user.canteen_id]);
@@ -57,6 +115,12 @@ exports.acceptOrder = async (req, res) => {
       'INSERT INTO notifications (user_id, user_role, type, message) VALUES (?, "student", "order_accepted", ?)',
       [rows[0].student_id, `🍳 Your order ${rows[0].order_code} has been accepted!`]
     );
+    // emit slot update
+    try {
+      const slotDate = rows[0].is_preorder ? new Date(rows[0].preorder_date) : new Date(rows[0].placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on accept:', e.message); }
     res.json({ message: 'Order accepted' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -66,6 +130,12 @@ exports.markPreparing = async (req, res) => {
     const [rows] = await db.query('SELECT * FROM orders WHERE order_id = ? AND canteen_id = ?', [req.params.id, req.user.canteen_id]);
     if (!rows.length) return res.status(404).json({ error: 'Order not found' });
     await db.query('UPDATE orders SET status = "preparing" WHERE order_id = ?', [req.params.id]);
+    // emit slot update
+    try {
+      const slotDate = rows[0].is_preorder ? new Date(rows[0].preorder_date) : new Date(rows[0].placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on preparing:', e.message); }
     res.json({ message: 'Order marked preparing' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -94,6 +164,12 @@ exports.markReady = async (req, res) => {
       'INSERT INTO notifications (user_id, user_role, type, message) VALUES (?, "student", "order_ready", ?)',
       [order.student_id, `🔔 Your order ${order.order_code} is ready for pickup!`]
     );
+    // emit slot update (order moved out of occupying statuses)
+    try {
+      const slotDate = order.is_preorder ? new Date(order.preorder_date) : new Date(order.placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(order.canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on ready:', e.message); }
     res.json({ message: 'Order marked ready' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -112,6 +188,12 @@ exports.markDelivered = async (req, res) => {
       'INSERT INTO notifications (user_id, user_role, type, message) VALUES (?, "student", "order_delivered", ?)',
       [order.student_id, `✅ Your order ${order.order_code} has arrived at ${order.delivery_location}! 🛵`]
     );
+    // emit slot update (delivery completed)
+    try {
+      const slotDate = rows[0].is_preorder ? new Date(rows[0].preorder_date) : new Date(rows[0].placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on delivered:', e.message); }
     res.json({ message: 'Order delivered' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -123,6 +205,12 @@ exports.completeOrder = async (req, res) => {
     await db.query('UPDATE orders SET status = "picked_up", picked_at = NOW() WHERE order_id = ?', [req.params.id]);
     const { awardPoints } = require('../utils/loyaltyEngine');
     await awardPoints(rows[0].student_id, rows[0].order_id, rows[0].total_amount);
+    // emit slot update (picked up)
+    try {
+      const slotDate = rows[0].is_preorder ? new Date(rows[0].preorder_date) : new Date(rows[0].placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on picked up:', e.message); }
     res.json({ message: 'Order completed' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };

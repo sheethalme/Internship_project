@@ -18,9 +18,10 @@ const getSlots = async (canteenId, date = new Date()) => {
 
   // Count existing orders for each slot
   const dateStr = date.toISOString().split('T')[0];
+  // Only count orders that are still occupying a slot (placed -> accepted -> preparing)
   const [orders] = await db.query(
     `SELECT pickup_slot, COUNT(*) as count FROM orders
-     WHERE canteen_id = ? AND DATE(placed_at) = ? AND status NOT IN ('cancelled')
+     WHERE canteen_id = ? AND DATE(placed_at) = ? AND status IN ('placed','accepted','preparing','ready')
      GROUP BY pickup_slot`,
     [canteenId, dateStr]
   );

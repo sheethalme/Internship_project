@@ -52,7 +52,13 @@ exports.getAllOrders = async (req, res) => {
 exports.updateOrder = async (req, res) => {
   try {
     const { status } = req.body;
+    const [rows] = await db.query('SELECT * FROM orders WHERE order_id = ?', [req.params.id]);
     await db.query('UPDATE orders SET status = ? WHERE order_id = ?', [status, req.params.id]);
+    try {
+      const slotDate = rows[0].is_preorder ? new Date(rows[0].preorder_date) : new Date(rows[0].placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(rows[0].canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on admin update:', e.message); }
     res.json({ message: 'Order updated' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
@@ -62,7 +68,7 @@ exports.getAllCanteens = async (req, res) => {
     const [canteens] = await db.query('SELECT * FROM canteens');
     for (const c of canteens) {
       const [[{ active_orders }]] = await db.query(
-        'SELECT COUNT(*) as active_orders FROM orders WHERE canteen_id = ? AND status NOT IN ("picked_up","delivered","cancelled")',
+        'SELECT COUNT(*) as active_orders FROM orders WHERE canteen_id = ? AND status IN ("placed","accepted","preparing")',
         [c.canteen_id]
       );
       c.active_orders = active_orders;
@@ -146,7 +152,7 @@ exports.getAnalytics = async (req, res) => {
       `SELECT c.canteen_id, c.name, c.avg_rating,
               COUNT(o.order_id) as total_orders,
               COALESCE(SUM(o.total_amount), 0) as revenue,
-              (SELECT COUNT(*) FROM orders o2 WHERE o2.canteen_id = c.canteen_id AND o2.status NOT IN ('picked_up','delivered','cancelled')) as active_orders
+              (SELECT COUNT(*) FROM orders o2 WHERE o2.canteen_id = c.canteen_id AND o2.status IN ('placed','accepted','preparing')) as active_orders
        FROM canteens c LEFT JOIN orders o ON c.canteen_id = o.canteen_id AND o.status NOT IN ('cancelled')
        GROUP BY c.canteen_id`
     );

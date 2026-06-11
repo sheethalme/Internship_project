@@ -25,8 +25,8 @@ def predict():
             
         df = pd.DataFrame(input_data)
         
-        # Required columns in order
-        required_cols = ['item_id', 'quantity', 'queue_length', 'is_peak_hour', 'chef_availability', 'food_complexity']
+        # Required columns in order (include prep_time_mins baseline)
+        required_cols = ['item_id', 'quantity', 'queue_length', 'is_peak_hour', 'chef_availability', 'food_complexity', 'prep_time_mins']
         df = df[required_cols]
 
         # Predict

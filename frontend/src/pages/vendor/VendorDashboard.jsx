@@ -15,20 +15,43 @@ export default function VendorDashboard() {
 
   const [stats, setStats] = useState({ total_orders: 0, revenue: 0, pending_orders: 0, avg_rating: canteen?.avg_rating || 0 });
   const [liveOrders, setLiveOrders] = useState([]);
+  const [canceling, setCanceling] = useState(false);
 
-  useEffect(() => {
-    api.get('/vendor/dashboard').then(setStats).catch(() => {});
-    const fetchLive = () => api.get('/vendor/orders/live').then(data => {
+  const fetchLive = async () => {
+    try {
+      const data = await api.get('/vendor/orders/live');
       setLiveOrders(data.map(o => ({
         ...o,
         total: o.total_amount,
         items: (o.items || []).map(i => ({ name: i.name, qty: i.quantity ?? i.qty })),
       })));
-    }).catch(() => {});
+    } catch {
+      // ignore polling failures
+    }
+  };
+
+  useEffect(() => {
+    api.get('/vendor/dashboard').then(setStats).catch(() => {});
     fetchLive();
     const interval = setInterval(fetchLive, 8000);
     return () => clearInterval(interval);
   }, []);
+
+  const cancelAllOrders = async () => {
+    if (!liveOrders.length) return;
+    if (!window.confirm('Cancel all active orders? This cannot be undone.')) return;
+    setCanceling(true);
+    try {
+      await api.put('/vendor/orders/cancel-all');
+      toast('All active orders have been cancelled.', 'warning');
+      api.get('/vendor/dashboard').then(setStats).catch(() => {});
+      fetchLive();
+    } catch (err) {
+      toast(err.message || 'Failed to cancel orders', 'error');
+    } finally {
+      setCanceling(false);
+    }
+  };
 
   const cycleStatus = () => {
     const next = { open: 'closed', closed: 'unavailable', unavailable: 'open' };
@@ -77,10 +100,19 @@ export default function VendorDashboard() {
 
       {/* Queue summary */}
       <div className="glass-card p-5">
-        <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-          <ShoppingBag size={18} className="text-gold-400" /> Live Queue
-          <span className="bg-gold-500/20 text-gold-400 text-xs px-2 py-0.5 rounded-full ml-1">{liveOrders.length} orders</span>
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-white font-bold flex items-center gap-2">
+            <ShoppingBag size={18} className="text-gold-400" /> Live Queue
+            <span className="bg-gold-500/20 text-gold-400 text-xs px-2 py-0.5 rounded-full ml-1">{liveOrders.length} orders</span>
+          </h3>
+          <button
+            onClick={cancelAllOrders}
+            disabled={!liveOrders.length || canceling}
+            className="btn-outline text-xs px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {canceling ? 'Cancelling…' : 'Cancel All Active'}
+          </button>
+        </div>
         {liveOrders.length === 0 ? (
           <p className="text-white/40 text-sm text-center py-6">No active orders in queue</p>
         ) : (

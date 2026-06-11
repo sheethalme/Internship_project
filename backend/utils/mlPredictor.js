@@ -3,7 +3,7 @@ const path = require('path');
 
 /**
  * Predicts food preparation time using the XGBoost model.
- * @param {Object} factors - { item_id, quantity, queue_length, is_peak_hour, chef_availability, food_complexity }
+ * @param {Object} factors - { item_id, quantity, queue_length, is_peak_hour, chef_availability, food_complexity, prep_time_mins }
  * @returns {Promise<number>} - Estimated preparation time in minutes.
  */
 const predictPrepTime = (factors) => {

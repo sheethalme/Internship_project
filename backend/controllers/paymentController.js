@@ -19,6 +19,13 @@ exports.confirm = async (req, res) => {
     // Simulate payment success
     await db.query('UPDATE payments SET status = "completed", paid_at = NOW() WHERE payment_id = ?', [payment_id]);
     await db.query('UPDATE orders SET status = "placed" WHERE order_id = ?', [payment.order_id]);
+    // emit slot update after payment marks order placed
+    try {
+      const [[order]] = await db.query('SELECT * FROM orders WHERE order_id = ?', [payment.order_id]);
+      const slotDate = order.is_preorder ? new Date(order.preorder_date) : new Date(order.placed_at);
+      const slotSocket = require('../socket');
+      slotSocket.emitSlotUpdate(order.canteen_id, slotDate);
+    } catch (e) { console.warn('Failed to emit slot update on payment confirm:', e.message); }
     res.json({ message: 'Payment confirmed', status: 'completed' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 };

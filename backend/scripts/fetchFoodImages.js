@@ -1,3 +1,4 @@
+
 // Run: PEXELS_API_KEY=your_key node scripts/fetchFoodImages.js
 // Get a free key at: https://www.pexels.com/api/
 

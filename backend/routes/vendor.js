@@ -13,6 +13,7 @@ router.put('/orders/:id/prepare', c.markPreparing);
 router.put('/orders/:id/ready', c.markReady);
 router.put('/orders/:id/delivered', c.markDelivered);
 router.put('/orders/:id/complete', c.completeOrder);
+router.put('/orders/cancel-all', c.cancelAllOrders);
 router.put('/canteen/status', c.updateCanteenStatus);
 router.get('/analytics', c.getAnalytics);
 router.get('/sentiment', c.getSentiment);
